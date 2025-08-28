@@ -1,0 +1,22 @@
+{
+  "name": "musix",
+  "version": "1.0.0",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node backend/server.js",
+    "dev": "nodemon backend/server.js",
+    "serve-frontend": "npx http-server ./frontend -p 5173 -c-1"
+  },
+  "dependencies": {
+    "body-parser": "^1.20.3",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "ffmpeg-static": "^4.4.0",
+    "fluent-ffmpeg": "^2.1.2",
+    "yt-dlp-exec": "^1.0.2"
+  },
+  "devDependencies": {
+    "http-server": "^14.1.1",
+    "nodemon": "^2.0.22"
+  }
+}

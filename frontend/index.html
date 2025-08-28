@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Musix 🎵</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <h1>Musix 🎶</h1>
+
+  <section class="row">
+    <div class="card">
+      <h2>Create Playlist</h2>
+      <input id="newPlaylist" placeholder="Playlist name" />
+      <button id="createBtn">Create</button>
+    </div>
+
+    <div class="card">
+      <h2>Import YouTube Playlist</h2>
+      <input id="importUrl" placeholder="YouTube playlist URL" />
+      <input id="importName" placeholder="Save as playlist name" />
+      <button id="importBtn">Import</button>
+    </div>
+
+    <div class="card">
+      <h2>Add Single Song</h2>
+      <select id="playlistSelect"></select>
+      <input id="songUrl" placeholder="YouTube video URL" />
+      <button id="addBtn">Add Song</button>
+    </div>
+  </section>
+
+  <section class="row">
+    <div class="card full">
+      <h2>Tracks in Playlist: <span id="activePlaylistName">-</span></h2>
+      <ul id="tracks"></ul>
+      <div style="margin-top:10px;">
+        <button id="downloadPlaylistBtn">Download Playlist (MP3)</button>
+        <button id="shuffleBtn">Shuffle</button>
+        <button id="nextBtn">Next ▶️</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="row">
+    <div class="card full">
+      <h2>Player</h2>
+      <audio id="player" controls></audio>
+      <div id="nowPlaying"></div>
+    </div>
+  </section>
+
+  <section class="row">
+    <div class="card full">
+      <h2>My Downloads (server)</h2>
+      <div id="downloads"></div>
+    </div>
+  </section>
+
+  <script src="app.js"></script>
+</body>
+</html>
