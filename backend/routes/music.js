@@ -1,21 +1,36 @@
+// backend/routes/music.js
 const express = require("express");
 const router = express.Router();
+
 const fs = require("fs");
 const fsp = fs.promises;
 const path = require("path");
-const sanitize = require("../utils/sanitize");
-const ytdlp = require("yt-dlp-exec").raw; // for piping/streaming
-const ytdlpExec = require("yt-dlp-exec"); // for promise-style
 
-// 🔹 Set your ffmpeg binary path (Windows C:\ffmpeg\bin\ffmpeg.exe)
-const FFMPEG_PATH = "C:\\ffmpeg\\bin\\ffmpeg.exe";
+const sanitize = require("../utils/sanitize");
+
+// ✅ Correct import for yt-dlp-wrap v2.x
+const { YTDlpWrap } = require("yt-dlp-wrap");
+const ytdlp = new YTDlpWrap();
+
+// auto-download yt-dlp binary if missing
+(async () => {
+  try {
+    await ytdlp.getYtdlpPath(); // ensures binary exists
+  } catch (err) {
+    console.error("Failed to download yt-dlp binary:", err);
+  }
+})();
 
 const ROOT = path.join(__dirname, "..");
 const STORAGE = path.join(ROOT, "storage.json");
 const DOWNLOADS = path.join(ROOT, "downloads");
 
-// ensure storage and downloads exist
-if (!fs.existsSync(STORAGE)) fs.writeFileSync(STORAGE, JSON.stringify({ playlists: {} }, null, 2));
+// ---- ffmpeg location (Windows) ----
+const FFMPEG_PATH = process.env.FFMPEG_PATH || "C:\\ffmpeg\\bin\\ffmpeg.exe";
+
+// ensure storage + downloads
+if (!fs.existsSync(STORAGE))
+  fs.writeFileSync(STORAGE, JSON.stringify({ playlists: {} }, null, 2));
 if (!fs.existsSync(DOWNLOADS)) fs.mkdirSync(DOWNLOADS, { recursive: true });
 
 function loadDB() {
@@ -25,7 +40,24 @@ function saveDB(db) {
   fs.writeFileSync(STORAGE, JSON.stringify(db, null, 2));
 }
 
-// ----------------- Playlist CRUD -----------------
+// In-memory job progress
+const jobs = new Map(); // jobId -> { status, percent, message }
+function newJob() {
+  const id = Math.random().toString(36).slice(2);
+  jobs.set(id, { status: "running", percent: 0, message: "Starting..." });
+  return id;
+}
+function setJob(id, patch) {
+  if (jobs.has(id)) Object.assign(jobs.get(id), patch);
+}
+function doneJob(id) {
+  setJob(id, { status: "done", percent: 100, message: "Completed" });
+}
+function failJob(id, msg) {
+  setJob(id, { status: "error", message: msg });
+}
+
+// ----------------- Playlists -----------------
 router.post("/playlist", (req, res) => {
   const { name } = req.body;
   if (!name) return res.status(400).json({ error: "Playlist name required" });
@@ -38,166 +70,250 @@ router.post("/playlist", (req, res) => {
   res.json({ success: true, name: key });
 });
 
-router.get("/playlists", (_req, res) => {
+router.get("/playlists", async (_req, res) => {
   const db = loadDB();
   res.json({ names: Object.keys(db.playlists) });
 });
 
-router.get("/playlist/:name", (req, res) => {
-  const name = sanitize(req.params.name);
-  const db = loadDB();
-  if (!db.playlists[name]) return res.status(404).json({ error: "Playlist not found" });
-  res.json({ name, songs: db.playlists[name] });
-});
-
-// ----------------- Add single song to playlist -----------------
-router.post("/playlist/:name/add", async (req, res) => {
-  const name = sanitize(req.params.name);
-  const { url } = req.body;
-  if (!url) return res.status(400).json({ error: "URL required" });
-  const db = loadDB();
-  if (!db.playlists[name]) return res.status(404).json({ error: "Playlist not found" });
-
-  try {
-    const info = await ytdlpExec(url, {
-      dumpSingleJson: true,
-      noWarnings: true,
-      ffmpegLocation: FFMPEG_PATH
-    });
-    const title = sanitize(info.title || "Untitled");
-    const id = info.id || url;
-    if (db.playlists[name].some(s => s.id === id || s.url === url)) {
-      return res.json({ success: true, message: "Already in playlist" });
-    }
-    db.playlists[name].push({ id, title, url });
-    saveDB(db);
-    res.json({ success: true, song: { id, title, url } });
-  } catch (e) {
-    res.status(500).json({ error: "Failed to fetch video info", detail: String(e) });
-  }
-});
-
-// ----------------- Import YouTube playlist -----------------
-router.post("/playlist/import", async (req, res) => {
-  const { url, name } = req.body;
-  if (!url || !name) return res.status(400).json({ error: "URL and name required" });
-
-  const key = sanitize(name);
-  const db = loadDB();
-  if (!db.playlists[key]) db.playlists[key] = [];
-
-  try {
-    const info = await ytdlpExec(url, {
-      dumpSingleJson: true,
-      flatPlaylist: true,
-      noWarnings: true,
-      ffmpegLocation: FFMPEG_PATH
-    });
-    const entries = info.entries || [];
-    for (const e of entries) {
-      const videoId = e.id;
-      const videoUrl = e.url || `https://www.youtube.com/watch?v=${videoId}`;
-      const title = sanitize(e.title || videoId || "Untitled");
-      if (!db.playlists[key].some(s => s.id === videoId)) {
-        db.playlists[key].push({ id: videoId, title, url: videoUrl });
-      }
-    }
-    saveDB(db);
-    const dir = path.join(DOWNLOADS, key);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    res.json({ success: true, added: entries.length, playlist: key });
-  } catch (e) {
-    res.status(500).json({ error: "Failed to import playlist", detail: String(e) });
-  }
-});
-
-// ----------------- Stream a track -----------------
-router.get("/stream", (req, res) => {
-  const { url } = req.query;
-  if (!url) return res.status(400).send("URL required");
-  try {
-    const proc = ytdlp(url, ["-f", "bestaudio", "-o", "-"], {
-      stdio: ["ignore", "pipe", "ignore"],
-      ffmpegLocation: FFMPEG_PATH
-    });
-    res.setHeader("Content-Type", "audio/mpeg");
-    proc.stdout.pipe(res);
-  } catch (e) {
-    res.status(500).send("Stream failed");
-  }
-});
-
-// helper to download a single song
-async function downloadSongToFolder(songUrl, outDir) {
-  const template = path.join(outDir, "%(title).120B.%(ext)s");
-  await ytdlpExec(songUrl, {
-    extractAudio: true,
-    audioFormat: "mp3",
-    output: template,
-    embedThumbnail: true,
-    addMetadata: true,
-    ffmpegLocation: FFMPEG_PATH
-  });
-}
-
-// ----------------- Download single song -----------------
-router.post("/download/song/:playlist/:index", async (req, res) => {
-  const playlistName = sanitize(req.params.playlist);
-  const idx = Number(req.params.index);
-  const db = loadDB();
-  const list = db.playlists[playlistName];
-  if (!list) return res.status(404).json({ error: "Playlist not found" });
-  if (!Number.isInteger(idx) || idx < 0 || idx >= list.length) return res.status(404).json({ error: "Song index invalid" });
-
-  const song = list[idx];
-  const outDir = path.join(DOWNLOADS, playlistName);
-  if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
-
-  try {
-    await downloadSongToFolder(song.url, outDir);
-    res.json({ success: true, savedTo: `downloads/${playlistName}/` });
-  } catch (e) {
-    res.status(500).json({ error: "Download failed", detail: String(e) });
-  }
-});
-
-// ----------------- Download entire playlist -----------------
-router.post("/playlist/:name/download", async (req, res) => {
+// Only return DOWNLOADED songs (exist on disk)
+router.get("/playlist/:name", async (req, res) => {
   const name = sanitize(req.params.name);
   const db = loadDB();
   const list = db.playlists[name];
   if (!list) return res.status(404).json({ error: "Playlist not found" });
-  if (!list.length) return res.status(400).json({ error: "Playlist is empty" });
 
-  const outDir = path.join(DOWNLOADS, name);
-  if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+  const dir = path.join(DOWNLOADS, name);
+  let downloaded = [];
+  if (fs.existsSync(dir)) {
+    const files = (await fsp.readdir(dir)).filter(f => f.toLowerCase().endsWith(".mp3"));
+    const fileSet = new Set(files);
+    downloaded = list
+      .filter(s => s.filename && fileSet.has(s.filename))
+      .map(s => ({
+        id: s.id,
+        title: s.title,
+        url: s.url,
+        filename: s.filename,
+        fileUrl: `/downloads/${encodeURIComponent(name)}/${encodeURIComponent(s.filename)}`
+      }));
+  }
+
+  res.json({ name, songs: downloaded });
+});
+
+// Delete a whole playlist (files + db)
+router.delete("/playlist/:name", async (req, res) => {
+  const name = sanitize(req.params.name);
+  const db = loadDB();
+  if (!db.playlists[name]) return res.status(404).json({ error: "Playlist not found" });
+
+  const dir = path.join(DOWNLOADS, name);
+  if (fs.existsSync(dir)) {
+    const entries = await fsp.readdir(dir);
+    for (const e of entries) {
+      await fsp.rm(path.join(dir, e), { force: true });
+    }
+    await fsp.rmdir(dir, { force: true }).catch(() => {});
+  }
+
+  delete db.playlists[name];
+  saveDB(db);
+  res.json({ success: true });
+});
+
+// Delete one song from playlist by filename
+router.delete("/playlist/:name/song", async (req, res) => {
+  const name = sanitize(req.params.name);
+  const { filename } = req.body;
+  if (!filename) return res.status(400).json({ error: "filename required" });
+
+  const db = loadDB();
+  const list = db.playlists[name];
+  if (!list) return res.status(404).json({ error: "Playlist not found" });
+
+  const file = path.join(DOWNLOADS, name, filename);
+  if (fs.existsSync(file)) await fsp.rm(file, { force: true });
+
+  const idx = list.findIndex(s => s.filename === filename);
+  if (idx >= 0) list.splice(idx, 1);
+  saveDB(db);
+
+  res.json({ success: true });
+});
+
+// ----------------- Search (YouTube) -----------------
+router.get("/search", async (req, res) => {
+  const q = (req.query.q || "").trim();
+  if (!q) return res.json({ results: [] });
 
   try {
-    for (const song of list) {
-      await downloadSongToFolder(song.url, outDir);
-    }
-    res.json({ success: true, savedTo: `downloads/${name}/` });
+    const info = await ytdlp.exec([
+      `ytsearch15:${q}`,
+      "--dump-single-json",
+      "--flat-playlist"
+    ]);
+    const entries = (JSON.parse(info).entries || []).map(e => ({
+      id: e.id,
+      title: e.title,
+      url: e.url || `https://www.youtube.com/watch?v=${e.id}`,
+    }));
+
+    res.json({ results: entries });
   } catch (e) {
-    res.status(500).json({ error: "Download failed", detail: String(e) });
+    res.status(500).json({ error: "Search failed", detail: String(e) });
   }
 });
 
-// ----------------- List server downloads -----------------
-router.get("/downloads", async (_req, res) => {
+// ----------------- Download helpers -----------------
+function safeFileName(base) {
+  let s = sanitize(base || "Untitled");
+  if (!s.endsWith(".mp3")) s += ".mp3";
+  return s;
+}
+function parseProgressFromLine(line) {
+  const m = line.toString().match(/\[download\]\s+(\d+(?:\.\d+)?)%/i);
+  return m ? parseFloat(m[1]) : null;
+}
+async function downloadByIdToPlaylist(videoId, playlistName, jobId) {
+  const plKey = sanitize(playlistName);
+  const dir = path.join(DOWNLOADS, plKey);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+  const url = `https://www.youtube.com/watch?v=${videoId}`;
+  const infoStr = await ytdlp.exec([url, "--dump-single-json"]);
+  const info = JSON.parse(infoStr);
+  const title = info.title || videoId;
+  const fileName = safeFileName(`${title}.mp3`);
+  const outTemplate = path.join(dir, "%(title).150B.%(ext)s");
+
+  const child = ytdlp.spawn([
+    url,
+    "--extract-audio",
+    "--audio-format", "mp3",
+    "--embed-thumbnail",
+    "--add-metadata",
+    "--output", outTemplate,
+    "--ffmpeg-location", FFMPEG_PATH
+  ]);
+
+  child.stderr.on("data", (chunk) => {
+    const p = parseProgressFromLine(chunk.toString());
+    if (p !== null) setJob(jobId, { percent: Math.max(1, Math.min(99, p)), message: `Downloading ${title}` });
+  });
+
+  await new Promise((resolve, reject) => {
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`yt-dlp exited with ${code}`));
+    });
+  });
+
+  const afterFiles = await fsp.readdir(dir);
+  const found = afterFiles.find(f => f.toLowerCase().endsWith(".mp3"));
+  const finalFile = found || fileName;
+
+  const db = loadDB();
+  if (!db.playlists[plKey]) db.playlists[plKey] = [];
+  const existing = db.playlists[plKey].find(s => s.id === videoId);
+  const payload = { id: videoId, title, url, filename: finalFile };
+  if (existing) Object.assign(existing, payload);
+  else db.playlists[plKey].push(payload);
+  saveDB(db);
+}
+
+// ----------------- Download one song -----------------
+router.post("/download/song", async (req, res) => {
+  const { playlist, videoId } = req.body;
+  if (!playlist || !videoId) return res.status(400).json({ error: "playlist and videoId required" });
+
+  const jobId = newJob();
+  res.json({ jobId });
+
   try {
-    const folders = (await fsp.readdir(DOWNLOADS, { withFileTypes: true }))
-      .filter(d => d.isDirectory())
-      .map(d => d.name);
-    const data = {};
-    for (const f of folders) {
-      const files = (await fsp.readdir(path.join(DOWNLOADS, f)))
-        .filter(n => n.toLowerCase().endsWith(".mp3"));
-      data[f] = files;
-    }
-    res.json({ downloads: data, base: "/downloads" });
+    await downloadByIdToPlaylist(videoId, playlist, jobId);
+    doneJob(jobId);
   } catch (e) {
-    res.status(500).json({ error: "Failed to read downloads" });
+    failJob(jobId, String(e));
   }
+});
+
+// ----------------- Import playlist preview -----------------
+router.post("/import/preview", async (req, res) => {
+  const { url } = req.body;
+  if (!url) return res.status(400).json({ error: "url required" });
+
+  try {
+    const infoStr = await ytdlp.exec([url, "--dump-single-json", "--flat-playlist"]);
+    const info = JSON.parse(infoStr);
+    const entries = (info.entries || []).map(e => ({
+      id: e.id,
+      title: e.title || e.id,
+      url: e.url || `https://www.youtube.com/watch?v=${e.id}`,
+    }));
+
+    res.json({ results: entries });
+  } catch (e) {
+    res.status(500).json({ error: "Import preview failed", detail: String(e) });
+  }
+});
+
+// Download selected ids into a playlist
+router.post("/import/download", async (req, res) => {
+  const { name, selectedIds } = req.body;
+  if (!name || !Array.isArray(selectedIds) || selectedIds.length === 0) {
+    return res.status(400).json({ error: "name and selectedIds[] required" });
+  }
+
+  const jobId = newJob();
+  res.json({ jobId });
+
+  try {
+    const db = loadDB();
+    const key = sanitize(name);
+    if (!db.playlists[key]) db.playlists[key] = [];
+    saveDB(db);
+
+    const total = selectedIds.length;
+    let idx = 0;
+    for (const vid of selectedIds) {
+      setJob(jobId, { message: `Downloading ${idx + 1}/${total}` });
+      await downloadByIdToPlaylist(vid, key, jobId);
+      idx++;
+      setJob(jobId, { percent: Math.min(99, Math.round((idx / total) * 100)) });
+    }
+
+    doneJob(jobId);
+  } catch (e) {
+    failJob(jobId, String(e));
+  }
+});
+
+// ----------------- Progress polling -----------------
+router.get("/progress/:id", (req, res) => {
+  const id = req.params.id;
+  if (!jobs.has(id)) return res.status(404).json({ error: "job not found" });
+  res.json(jobs.get(id));
+});
+
+// ----------------- Downloads listing -----------------
+router.get("/downloads", async (_req, res) => {
+  const out = {};
+  if (!fs.existsSync(DOWNLOADS)) return res.json({ downloads: out, base: "/downloads" });
+
+  const folders = (await fsp.readdir(DOWNLOADS, { withFileTypes: true }))
+    .filter(d => d.isDirectory())
+    .map(d => d.name);
+
+  for (const pl of folders) {
+    const files = (await fsp.readdir(path.join(DOWNLOADS, pl)))
+      .filter(n => n.toLowerCase().endsWith(".mp3"));
+    out[pl] = files.map(f => ({
+      filename: f,
+      fileUrl: `/downloads/${encodeURIComponent(pl)}/${encodeURIComponent(f)}`
+    }));
+  }
+  res.json({ downloads: out, base: "/downloads" });
 });
 
 module.exports = router;

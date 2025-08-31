@@ -1,62 +1,55 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <title>Musix 🎵</title>
-  <link rel="stylesheet" href="style.css" />
+  <meta charset="UTF-8">
+  <title>Musix</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1>Musix 🎶</h1>
-
-  <section class="row">
-    <div class="card">
-      <h2>Create Playlist</h2>
-      <input id="newPlaylist" placeholder="Playlist name" />
-      <button id="createBtn">Create</button>
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="nav-left">Musix</div>
+    <div class="nav-right">
+      <button id="searchBtn" class="icon-btn" title="Search Songs">
+        🔍
+      </button>
+      <button id="importBtn" class="icon-btn" title="Import Playlist">
+        📥
+      </button>
     </div>
+  </nav>
 
-    <div class="card">
-      <h2>Import YouTube Playlist</h2>
-      <input id="importUrl" placeholder="YouTube playlist URL" />
-      <input id="importName" placeholder="Save as playlist name" />
-      <button id="importBtn">Import</button>
-    </div>
+  <!-- Main content -->
+  <main class="container">
+    <!-- Playlists section -->
+    <section id="playlists" class="card">
+      <h2>Your Playlists</h2>
+      <ul id="playlistList"></ul>
+      <div class="playlist-actions">
+        <input type="text" id="newPlaylistName" placeholder="New playlist name">
+        <button id="createPlaylistBtn">Create Playlist</button>
+      </div>
+    </section>
 
-    <div class="card">
-      <h2>Add Single Song</h2>
-      <select id="playlistSelect"></select>
-      <input id="songUrl" placeholder="YouTube video URL" />
-      <button id="addBtn">Add Song</button>
-    </div>
-  </section>
+    <!-- Songs section -->
+    <section id="songs" class="card hidden">
+      <h2 id="songsTitle">Songs</h2>
+      <ul id="songList"></ul>
+      <button id="backToPlaylists" class="back-btn">← Back</button>
+    </section>
+  </main>
 
-  <section class="row">
-    <div class="card full">
-      <h2>Tracks in Playlist: <span id="activePlaylistName">-</span></h2>
-      <ul id="tracks"></ul>
-      <div style="margin-top:10px;">
-        <button id="downloadPlaylistBtn">Download Playlist (MP3)</button>
-        <button id="shuffleBtn">Shuffle</button>
-        <button id="nextBtn">Next ▶️</button>
+  <!-- Loading Overlay -->
+  <div id="loadingOverlay" class="loading-overlay hidden">
+    <div class="loading-box">
+      <p id="loadingMessage">Preparing...</p>
+      <div class="progress-bar">
+        <div id="progressFill"></div>
       </div>
     </div>
-  </section>
-
-  <section class="row">
-    <div class="card full">
-      <h2>Player</h2>
-      <audio id="player" controls></audio>
-      <div id="nowPlaying"></div>
-    </div>
-  </section>
-
-  <section class="row">
-    <div class="card full">
-      <h2>My Downloads (server)</h2>
-      <div id="downloads"></div>
-    </div>
-  </section>
+  </div>
 
   <script src="app.js"></script>
 </body>
 </html>
+
