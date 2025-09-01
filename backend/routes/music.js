@@ -8,18 +8,12 @@ const path = require("path");
 
 const sanitize = require("../utils/sanitize");
 
-// ✅ Correct import for yt-dlp-wrap v2.x
-const { YTDlpWrap } = require("yt-dlp-wrap");
+// ✅ Import shim for yt-dlp-wrap v2.3.12
+let YTDlpWrap = require("yt-dlp-wrap");
+if (YTDlpWrap.default) {
+  YTDlpWrap = YTDlpWrap.default;
+}
 const ytdlp = new YTDlpWrap();
-
-// auto-download yt-dlp binary if missing
-(async () => {
-  try {
-    await ytdlp.getYtdlpPath(); // ensures binary exists
-  } catch (err) {
-    console.error("Failed to download yt-dlp binary:", err);
-  }
-})();
 
 const ROOT = path.join(__dirname, "..");
 const STORAGE = path.join(ROOT, "storage.json");
@@ -41,7 +35,7 @@ function saveDB(db) {
 }
 
 // In-memory job progress
-const jobs = new Map(); // jobId -> { status, percent, message }
+const jobs = new Map();
 function newJob() {
   const id = Math.random().toString(36).slice(2);
   jobs.set(id, { status: "running", percent: 0, message: "Starting..." });
@@ -75,7 +69,7 @@ router.get("/playlists", async (_req, res) => {
   res.json({ names: Object.keys(db.playlists) });
 });
 
-// Only return DOWNLOADED songs (exist on disk)
+// Only return DOWNLOADED songs
 router.get("/playlist/:name", async (req, res) => {
   const name = sanitize(req.params.name);
   const db = loadDB();
@@ -101,58 +95,19 @@ router.get("/playlist/:name", async (req, res) => {
   res.json({ name, songs: downloaded });
 });
 
-// Delete a whole playlist (files + db)
-router.delete("/playlist/:name", async (req, res) => {
-  const name = sanitize(req.params.name);
-  const db = loadDB();
-  if (!db.playlists[name]) return res.status(404).json({ error: "Playlist not found" });
-
-  const dir = path.join(DOWNLOADS, name);
-  if (fs.existsSync(dir)) {
-    const entries = await fsp.readdir(dir);
-    for (const e of entries) {
-      await fsp.rm(path.join(dir, e), { force: true });
-    }
-    await fsp.rmdir(dir, { force: true }).catch(() => {});
-  }
-
-  delete db.playlists[name];
-  saveDB(db);
-  res.json({ success: true });
-});
-
-// Delete one song from playlist by filename
-router.delete("/playlist/:name/song", async (req, res) => {
-  const name = sanitize(req.params.name);
-  const { filename } = req.body;
-  if (!filename) return res.status(400).json({ error: "filename required" });
-
-  const db = loadDB();
-  const list = db.playlists[name];
-  if (!list) return res.status(404).json({ error: "Playlist not found" });
-
-  const file = path.join(DOWNLOADS, name, filename);
-  if (fs.existsSync(file)) await fsp.rm(file, { force: true });
-
-  const idx = list.findIndex(s => s.filename === filename);
-  if (idx >= 0) list.splice(idx, 1);
-  saveDB(db);
-
-  res.json({ success: true });
-});
-
 // ----------------- Search (YouTube) -----------------
 router.get("/search", async (req, res) => {
   const q = (req.query.q || "").trim();
   if (!q) return res.json({ results: [] });
 
   try {
-    const info = await ytdlp.exec([
+    const result = await ytdlp.exec([
       `ytsearch15:${q}`,
       "--dump-single-json",
       "--flat-playlist"
     ]);
-    const entries = (JSON.parse(info).entries || []).map(e => ({
+    const info = JSON.parse(result.stdout);
+    const entries = (info.entries || []).map(e => ({
       id: e.id,
       title: e.title,
       url: e.url || `https://www.youtube.com/watch?v=${e.id}`,
@@ -181,7 +136,7 @@ async function downloadByIdToPlaylist(videoId, playlistName, jobId) {
 
   const url = `https://www.youtube.com/watch?v=${videoId}`;
   const infoStr = await ytdlp.exec([url, "--dump-single-json"]);
-  const info = JSON.parse(infoStr);
+  const info = JSON.parse(infoStr.stdout);
   const title = info.title || videoId;
   const fileName = safeFileName(`${title}.mp3`);
   const outTemplate = path.join(dir, "%(title).150B.%(ext)s");
@@ -244,8 +199,8 @@ router.post("/import/preview", async (req, res) => {
   if (!url) return res.status(400).json({ error: "url required" });
 
   try {
-    const infoStr = await ytdlp.exec([url, "--dump-single-json", "--flat-playlist"]);
-    const info = JSON.parse(infoStr);
+    const result = await ytdlp.exec([url, "--dump-single-json", "--flat-playlist"]);
+    const info = JSON.parse(result.stdout);
     const entries = (info.entries || []).map(e => ({
       id: e.id,
       title: e.title || e.id,
@@ -258,7 +213,7 @@ router.post("/import/preview", async (req, res) => {
   }
 });
 
-// Download selected ids into a playlist
+// ----------------- Import playlist download -----------------
 router.post("/import/download", async (req, res) => {
   const { name, selectedIds } = req.body;
   if (!name || !Array.isArray(selectedIds) || selectedIds.length === 0) {
