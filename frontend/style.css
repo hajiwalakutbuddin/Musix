@@ -7,8 +7,8 @@
 }
 
 body {
-  background: #f9f9f9;
-  color: #333;
+  background: #121212; /* dark background */
+  color: #ddd;
   line-height: 1.5;
 }
 
@@ -17,14 +17,15 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: #222;
-  color: #fff;
+  background: #1e1e1e;
+  color: #a366ff; /* purple highlight */
   padding: 12px 20px;
 }
 
 .nav-left {
-  font-size: 1.5em;
+  font-size: 1.6em;
   font-weight: bold;
+  color: #a366ff; /* heading Musix purple */
 }
 
 .nav-right {
@@ -33,7 +34,7 @@ body {
 }
 
 .icon-btn {
-  background: #444;
+  background: #2c2c2c;
   color: #fff;
   border: none;
   padding: 8px 12px;
@@ -44,7 +45,7 @@ body {
 }
 
 .icon-btn:hover {
-  background: #666;
+  background: #3c3c3c;
 }
 
 /* Layout */
@@ -59,14 +60,15 @@ body {
 
 /* Cards */
 .card {
-  background: #fff;
+  background: #1e1e1e;
   border-radius: 10px;
   padding: 20px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
 }
 
 .card h2 {
   margin-bottom: 12px;
+  color: #a366ff; /* purple */
 }
 
 /* Lists */
@@ -77,10 +79,11 @@ ul {
 
 li {
   padding: 10px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid #333;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  color: #eee;
 }
 
 li:last-child {
@@ -92,23 +95,31 @@ button {
   border: none;
   padding: 6px 12px;
   border-radius: 6px;
-  background: #0078d7;
+  background: #a366ff;
   color: white;
   font-size: 0.9em;
   transition: background 0.2s;
 }
 
 button:hover {
-  background: #005fa3;
+  background: #8c2fff;
+}
+
+button.danger {
+  background: #d33;
+}
+
+button.danger:hover {
+  background: #b22;
 }
 
 .back-btn {
   margin-top: 10px;
-  background: #888;
+  background: #555;
 }
 
 .back-btn:hover {
-  background: #555;
+  background: #777;
 }
 
 /* Playlist actions */
@@ -121,7 +132,9 @@ button:hover {
   flex: 1;
   padding: 8px;
   border-radius: 6px;
-  border: 1px solid #ccc;
+  border: 1px solid #333;
+  background: #222;
+  color: #eee;
 }
 
 /* Loading overlay */
@@ -131,7 +144,7 @@ button:hover {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0,0,0,0.7);
+  background: rgba(0,0,0,0.8);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -139,23 +152,24 @@ button:hover {
 }
 
 .loading-box {
-  background: #fff;
+  background: #1e1e1e;
   padding: 20px 30px;
   border-radius: 10px;
   text-align: center;
   width: 300px;
+  color: #ddd;
 }
 
 .progress-bar {
-  background: #eee;
+  background: #333;
   border-radius: 6px;
   overflow: hidden;
   height: 14px;
   margin-top: 10px;
 }
 
-#progressFill {
-  background: #0078d7;
+#progressBar {
+  background: #a366ff;
   height: 100%;
   width: 0%;
   transition: width 0.2s linear;
@@ -165,3 +179,4 @@ button:hover {
 .hidden {
   display: none;
 }
+

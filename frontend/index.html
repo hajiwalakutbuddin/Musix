@@ -10,14 +10,19 @@
   <nav class="navbar">
     <div class="nav-left">Musix</div>
     <div class="nav-right">
-      <button id="searchBtn" class="icon-btn" title="Search Songs">
-        🔍
-      </button>
-      <button id="importBtn" class="icon-btn" title="Import Playlist">
-        📥
-      </button>
+      <button id="openSearch" class="icon-btn" title="Search Songs">🔍</button>
+      <button id="openImport" class="icon-btn" title="Import Playlist">📥</button>
     </div>
   </nav>
+  <!-- Search Page -->
+  <section id="searchPage" class="card hidden">
+    <h2>Search</h2>
+    <input type="text" id="searchQuery" placeholder="Search songs...">
+    <button id="searchBtn">Search</button> <!-- keep this one -->
+    <div id="searchResults"></div>
+    <button id="backFromSearch" class="back-btn">← Back</button>
+  </section>
+
 
   <!-- Main content -->
   <main class="container">
@@ -26,30 +31,67 @@
       <h2>Your Playlists</h2>
       <ul id="playlistList"></ul>
       <div class="playlist-actions">
-        <input type="text" id="newPlaylistName" placeholder="New playlist name">
+        <input type="text" id="newPlaylist" placeholder="New playlist name">
         <button id="createPlaylistBtn">Create Playlist</button>
       </div>
     </section>
 
     <!-- Songs section -->
     <section id="songs" class="card hidden">
-      <h2 id="songsTitle">Songs</h2>
-      <ul id="songList"></ul>
+      <h2 id="activePlaylistName">No Playlist</h2>
+      <ul id="trackList"></ul>
+
+      <div class="controls">
+        <button id="playBtn">▶ Play</button>
+        <button id="nextBtn">⏭ Next</button>
+        <button id="shuffleBtn">🔀 Shuffle</button>
+        <button id="deletePlaylistBtn" class="danger">🗑 Delete Playlist</button>
+      </div>
+
+      <audio id="player" controls></audio>
+      <div id="nowPlaying">Now playing: -</div>
+
       <button id="backToPlaylists" class="back-btn">← Back</button>
+    </section>
+
+    <!-- Downloads Section -->
+    <section id="downloads" class="card">
+      <h2>Downloads</h2>
+      <div id="downloadsList"></div>
     </section>
   </main>
 
   <!-- Loading Overlay -->
-  <div id="loadingOverlay" class="loading-overlay hidden">
+  <div id="progressOverlay" class="loading-overlay hidden">
     <div class="loading-box">
-      <p id="loadingMessage">Preparing...</p>
+      <p id="progressText">Preparing...</p>
       <div class="progress-bar">
-        <div id="progressFill"></div>
+        <div id="progressBar"></div>
       </div>
     </div>
   </div>
 
+  <!-- Search Page
+  <section id="searchPage" class="card hidden">
+    <h2>Search</h2>
+    <input type="text" id="searchQuery" placeholder="Search songs...">
+    <button id="searchBtn">Search</button>
+    <div id="searchResults"></div>
+    <button id="backFromSearch" class="back-btn">← Back</button>
+  </section> -->
+
+  <!-- Import Page -->
+  <section id="importPage" class="card hidden">
+    <h2>Import Playlist</h2>
+    <input type="text" id="importUrl" placeholder="Playlist URL">
+    <button id="importPreviewBtn">Preview</button>
+    <div id="importResults"></div>
+    <button id="importDownloadSelected">Download Selected</button>
+    <button id="backFromImport" class="back-btn">← Back</button>
+  </section>
+
   <script src="app.js"></script>
 </body>
 </html>
+
 
