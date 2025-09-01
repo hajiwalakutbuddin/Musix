@@ -1,37 +1,30 @@
 // frontend/app.js
-const API = "http://localhost:5000/api";
+const API = (location.protocol + "//" + location.host) + "/api";
 
 let playlists = [];
 let active = null;
-let tracks = []; // downloaded, filtered from backend
+let tracks = [];
 let queue = [];
 let currentIndex = -1;
 
-// Elements
+// Elements - note IDs match index.html
 const els = {
   playlistList: document.getElementById("playlistList"),
   newPlaylist: document.getElementById("newPlaylist"),
   createPlaylistBtn: document.getElementById("createPlaylistBtn"),
 
-  activePlaylistName: document.getElementById("activePlaylistName"),
-  playBtn: document.getElementById("playBtn"),
-  shuffleBtn: document.getElementById("shuffleBtn"),
-  nextBtn: document.getElementById("nextBtn"),
-  deletePlaylistBtn: document.getElementById("deletePlaylistBtn"),
-
+  songsSection: document.getElementById("songs"),
   trackList: document.getElementById("trackList"),
+  backToPlaylists: document.getElementById("backToPlaylists"),
+  songsTitle: document.getElementById("songsTitle"),
 
-  downloads: document.getElementById("downloads"),
-  player: document.getElementById("player"),
-  nowPlaying: document.getElementById("nowPlaying"),
-
-  // Navbar overlays
-  openSearch: document.getElementById("openSearch"),
-  openImport: document.getElementById("openImport"),
+  // search/import overlays
+  searchBtn: document.getElementById("searchBtn"),
+  importBtn: document.getElementById("importBtn"),
   searchPage: document.getElementById("searchPage"),
   backFromSearch: document.getElementById("backFromSearch"),
   searchQuery: document.getElementById("searchQuery"),
-  searchBtn: document.getElementById("searchBtn"),
+  searchDoBtn: document.getElementById("searchDoBtn"),
   searchResults: document.getElementById("searchResults"),
 
   importPage: document.getElementById("importPage"),
@@ -41,36 +34,48 @@ const els = {
   importResults: document.getElementById("importResults"),
   importDownloadSelected: document.getElementById("importDownloadSelected"),
 
-  // Progress overlay
+  // progress
   progressOverlay: document.getElementById("progressOverlay"),
   progressBar: document.getElementById("progressBar"),
   progressText: document.getElementById("progressText"),
 };
 
-function show(el) { el.classList.remove("hidden"); }
-function hide(el) { el.classList.add("hidden"); }
+function show(el){ if(el) el.classList.remove("hidden"); }
+function hide(el){ if(el) el.classList.add("hidden"); }
 
 async function fetchJSON(url, opts) {
   const r = await fetch(url, opts);
-  if (!r.ok) throw new Error(await r.text());
+  if (!r.ok) {
+    const text = await r.text();
+    // try parse JSON for nice message
+    try {
+      const j = JSON.parse(text);
+      throw new Error(JSON.stringify(j));
+    } catch (_) {
+      throw new Error(text || `${r.status} ${r.statusText}`);
+    }
+  }
   return r.json();
 }
 
-// ----------- Playlists ------------
-
+// Playlists
 async function loadPlaylists() {
   const data = await fetchJSON(`${API}/playlists`);
-  playlists = data.names;
+  playlists = data.names || [];
   renderPlaylists();
   if (!active && playlists.length) {
     await setActive(playlists[0]);
+  } else {
+    // hide songs view
+    hide(els.songsSection);
   }
 }
 
 async function setActive(name) {
   active = name;
-  els.activePlaylistName.textContent = name || "No Playlist";
+  els.songsTitle.textContent = `Songs — ${name}`;
   await loadPlaylistTracks(name);
+  show(els.songsSection);
 }
 
 function renderPlaylists() {
@@ -78,16 +83,24 @@ function renderPlaylists() {
     <li>
       <div class="pl-item-title">${n}</div>
       <div class="pl-item-actions">
-        <button class="btn small" onclick="setActive('${n.replace(/'/g,"\\'")}')">Open</button>
-        <button class="btn small danger" onclick="deletePlaylist('${n.replace(/'/g,"\\'")}')">Delete</button>
+        <button class="btn small" data-open="${n}">Open</button>
+        <button class="btn small danger" data-delete="${n}">Delete</button>
       </div>
     </li>
   `).join("");
+
+  // attach handlers (avoid inline onclick)
+  Array.from(els.playlistList.querySelectorAll("[data-open]")).forEach(btn => {
+    btn.onclick = () => setActive(btn.getAttribute("data-open"));
+  });
+  Array.from(els.playlistList.querySelectorAll("[data-delete]")).forEach(btn => {
+    btn.onclick = () => deletePlaylist(btn.getAttribute("data-delete"));
+  });
 }
 
 async function createPlaylist() {
-  const name = els.newPlaylist.value.trim();
-  if (!name) return alert("Enter name");
+  const name = (els.newPlaylist.value || "").trim();
+  if (!name) return alert("Enter a playlist name");
   await fetchJSON(`${API}/playlist`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -102,17 +115,20 @@ async function deletePlaylist(name) {
   await fetchJSON(`${API}/playlist/${encodeURIComponent(name)}`, { method: "DELETE" });
   if (active === name) active = null;
   await loadPlaylists();
-  await loadDownloads();
-  els.trackList.innerHTML = "";
-  els.activePlaylistName.textContent = "No Playlist";
+  hide(els.songsSection);
 }
 
+// playlist tracks
 async function loadPlaylistTracks(name) {
-  const data = await fetchJSON(`${API}/playlist/${encodeURIComponent(name)}`);
-  tracks = data.songs || [];
-  queue = [];
-  currentIndex = -1;
-  renderTracks();
+  try {
+    const data = await fetchJSON(`${API}/playlist/${encodeURIComponent(name)}`);
+    tracks = data.songs || [];
+    renderTracks();
+  } catch (e) {
+    console.error(e);
+    tracks = [];
+    renderTracks();
+  }
 }
 
 function renderTracks() {
@@ -124,11 +140,18 @@ function renderTracks() {
     <li class="row">
       <div class="row-title">${t.title}</div>
       <div class="pl-item-actions">
-        <button class="btn small" onclick="playIndex(${i})">Play</button>
-        <button class="btn small danger" onclick="deleteTrack('${t.filename.replace(/'/g,"\\'")}')">❌</button>
+        <button class="btn small" data-play="${i}">Play</button>
+        <button class="btn small danger" data-delete="${t.filename}">Delete</button>
       </div>
     </li>
   `).join("");
+
+  Array.from(els.trackList.querySelectorAll("[data-play]")).forEach(b => {
+    b.onclick = () => playIndex(Number(b.getAttribute("data-play")));
+  });
+  Array.from(els.trackList.querySelectorAll("[data-delete]")).forEach(b => {
+    b.onclick = () => deleteTrack(b.getAttribute("data-delete"));
+  });
 }
 
 async function deleteTrack(filename) {
@@ -140,217 +163,137 @@ async function deleteTrack(filename) {
     body: JSON.stringify({ filename })
   });
   await loadPlaylistTracks(active);
-  await loadDownloads();
 }
 
-// ----------- Player (downloaded files only) ------------
-
-function playFile(url, title) {
-  els.player.src = url;
-  els.player.play().catch(() => {});
-  els.nowPlaying.textContent = `Now playing: ${title}`;
-}
-
+// minimal player behavior: open audio in new tab (simple)
 function playIndex(i) {
-  currentIndex = i;
   const s = tracks[i];
-  playFile(s.fileUrl, s.title);
+  if (!s) return;
+  // open the file URL in a new tab or play with HTMLAudio if you add a player
+  window.open(s.fileUrl, "_blank");
 }
 
-function next() {
-  if (!tracks.length) return;
-  currentIndex = (currentIndex + 1) % tracks.length;
-  playIndex(currentIndex);
-}
-
-function shuffle() {
-  if (!tracks.length) return;
-  const i = Math.floor(Math.random() * tracks.length);
-  playIndex(i);
-}
-
-// ----------- Downloads pane (right) ------------
-
-async function loadDownloads() {
-  const data = await fetchJSON(`${API}/downloads`);
-  const base = "http://localhost:5000" + data.base;
-
-  const html = Object.keys(data.downloads).length
-    ? Object.entries(data.downloads).map(([pl, files]) => `
-        <div class="dl-group">
-          <h3>${pl}</h3>
-          <ul>
-            ${files.map(f => `
-              <li>
-                <button class="link-btn" onclick="playFile('${base}/${encodeURIComponent(pl)}/${encodeURIComponent(f.filename)}','${(f.filename || "").replace(/'/g,"\\'")}')">
-                  ${f.filename}
-                </button>
-              </li>
-            `).join("")}
-          </ul>
-        </div>
-      `).join("")
-    : "<p>No downloads yet.</p>";
-
-  els.downloads.innerHTML = html;
-}
-
-// ----------- Search & Download flow ------------
-
+// -------- Search & Import --------
 function openSearch() { show(els.searchPage); }
-function closeSearch() { hide(els.searchPage); els.searchResults.innerHTML=""; els.searchQuery.value=""; }
+function closeSearch() { hide(els.searchPage); els.searchResults.innerHTML = ""; if(els.searchQuery) els.searchQuery.value=""; }
 
 async function doSearch() {
-  const q = els.searchQuery.value.trim();
+  const q = (els.searchQuery?.value || "").trim();
   if (!q) return;
-  const data = await fetchJSON(`${API}/search?q=${encodeURIComponent(q)}`);
-  if (!data.results?.length) { els.searchResults.innerHTML = "<p>No results</p>"; return; }
-  els.searchResults.innerHTML = data.results.map(r => `
-    <div class="result-row">
-      <div class="row-title">${r.title}</div>
-      <div>
-        <button class="btn small" onclick="downloadSongFromSearch('${r.id}')">Download</button>
+  try {
+    const data = await fetchJSON(`${API}/search?q=${encodeURIComponent(q)}`);
+    if (!data.results?.length) { els.searchResults.innerHTML = "<p>No results</p>"; return; }
+    els.searchResults.innerHTML = data.results.map(r => `
+      <div class="result-row">
+        <div class="row-title">${r.title}</div>
+        <div><button class="btn small" data-download="${r.id}">Download</button></div>
       </div>
-    </div>
-  `).join("");
+    `).join("");
+    Array.from(els.searchResults.querySelectorAll("[data-download]")).forEach(b => {
+      b.onclick = () => downloadSongFromSearch(b.getAttribute("data-download"));
+    });
+  } catch (e) {
+    alert("Search failed: " + e.message);
+  }
 }
 
 async function downloadSongFromSearch(videoId) {
-  if (!active) return alert("Select a playlist first from the left sidebar.");
-  const { jobId } = await fetchJSON(`${API}/download/song`, {
-    method:"POST",
-    headers:{ "Content-Type":"application/json" },
-    body: JSON.stringify({ playlist: active, videoId })
-  });
-  await trackJob(jobId);
-  await loadPlaylistTracks(active);
-  await loadDownloads();
+  if (!active) return alert("Select a playlist first.");
+  try {
+    const { jobId } = await fetchJSON(`${API}/download/song`, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ playlist: active, videoId })
+    });
+    await trackJob(jobId);
+    await loadPlaylistTracks(active);
+  } catch (e) {
+    alert("Download failed: " + e.message);
+  }
 }
 
-// ----------- Import playlist (preview -> choose -> download selected) -----
-
+// Import preview & download
 function openImport() { show(els.importPage); }
-function closeImport() { hide(els.importPage); els.importResults.innerHTML=""; els.importUrl.value=""; }
+function closeImport() { hide(els.importPage); els.importResults.innerHTML = ""; if(els.importUrl) els.importUrl.value=""; }
 
-let importPreview = []; // cache to know selected ids
+let importPreview = [];
 
 async function importPreviewFetch() {
-  const url = els.importUrl.value.trim();
-  if (!url) return;
-  const data = await fetchJSON(`${API}/import/preview`, {
-    method:"POST",
-    headers:{ "Content-Type":"application/json" },
-    body: JSON.stringify({ url })
-  });
-  importPreview = data.results || [];
-  if (!importPreview.length) {
-    els.importResults.innerHTML = "<p>No items found in this playlist.</p>";
-    return;
+  const url = (els.importUrl?.value || "").trim();
+  if (!url) return alert("Enter playlist URL");
+  try {
+    const data = await fetchJSON(`${API}/import/preview`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url })
+    });
+    importPreview = data.results || [];
+    if (!importPreview.length) { els.importResults.innerHTML = "<p>No items found</p>"; return; }
+    els.importResults.innerHTML = importPreview.map(r => `
+      <div class="import-row">
+        <label style="display:flex; gap:8px; align-items:center;">
+          <input type="checkbox" class="import-check" value="${r.id}" checked />
+          <span>${r.title}</span>
+        </label>
+      </div>
+    `).join("");
+  } catch (e) {
+    alert("Preview failed: " + e.message);
   }
-  els.importResults.innerHTML = importPreview.map(r => `
-    <div class="import-row">
-      <label style="display:flex; align-items:center; gap:8px;">
-        <input type="checkbox" class="import-check" value="${r.id}" checked />
-        <span>${r.title}</span>
-      </label>
-    </div>
-  `).join("");
 }
 
 async function importDownloadSelected() {
-  if (!active) return alert("Select a playlist first from the left sidebar.");
-  const checks = Array.from(document.querySelectorAll(".import-check"));
+  if (!active) return alert("Select a playlist first.");
+  const checks = Array.from(document.querySelectorAll(".import-check") || []);
   const ids = checks.filter(c => c.checked).map(c => c.value);
   if (!ids.length) return alert("Select at least one track.");
-
-  const { jobId } = await fetchJSON(`${API}/import/download`, {
-    method:"POST",
-    headers:{ "Content-Type":"application/json" },
-    body: JSON.stringify({ name: active, selectedIds: ids })
-  });
-  await trackJob(jobId);
-  await loadPlaylistTracks(active);
-  await loadDownloads();
-}
-
-// ----------- Progress overlay ------------
-
-// Set bar & text safely
-function setProgress(pct, text) {
   try {
-    if (els.progressBar) els.progressBar.style.width = `${Math.max(0, Math.min(100, pct || 0))}%`;
-    if (els.progressText && text !== undefined) els.progressText.textContent = text;
-  } catch (e) { /* ignore DOM errors */ }
+    const { jobId } = await fetchJSON(`${API}/import/download`, {
+      method: "POST", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ name: active, selectedIds: ids })
+    });
+    await trackJob(jobId);
+    await loadPlaylistTracks(active);
+  } catch (e) {
+    alert("Import download failed: " + e.message);
+  }
 }
 
-// Poll progress — only show overlay after first successful poll to avoid showing at startup
+// ---------- progress overlay ----------
+function setProgress(pct, text) {
+  try { if (els.progressBar) els.progressBar.style.width = `${Math.max(0, Math.min(100, pct||0))}%`; if (els.progressText && text !== undefined) els.progressText.textContent = text; } catch (e){}
+}
+
 async function trackJob(jobId) {
   if (!jobId) return;
-  let shown = false;
+  show(els.progressOverlay);
   try {
     while (true) {
-      // Fetch progress
-      let j;
-      try {
-        j = await fetchJSON(`${API}/progress/${jobId}`);
-      } catch (err) {
-        // if backend returns 404 or error, stop and ensure overlay hidden
-        hide(els.progressOverlay);
-        setProgress(0, "");
-        return;
-      }
-
-      // On first successful fetch, show overlay
-      if (!shown) {
-        show(els.progressOverlay);
-        shown = true;
-      }
-
+      const j = await fetchJSON(`${API}/progress/${jobId}`);
       setProgress(j.percent || 1, j.message || "");
-
       if (j.status === "done") break;
-      if (j.status === "error") throw new Error(j.message || "Job failed");
-
-      // wait
+      if (j.status === "error") throw new Error(j.message || "Job error");
       await new Promise(r => setTimeout(r, 700));
     }
   } catch (e) {
-    console.error("Job tracking error:", e);
-    alert("Download failed: " + (e.message || e));
+    alert("Job error: " + (e.message || e));
   } finally {
     hide(els.progressOverlay);
     setProgress(0, "");
   }
 }
 
-// ----------- Events ------------
-
-els.createPlaylistBtn.onclick = createPlaylist;
-
-els.playBtn.onclick = () => { if (tracks.length) playIndex(0); };
-els.shuffleBtn.onclick = shuffle;
-els.nextBtn.onclick = next;
-els.deletePlaylistBtn.onclick = () => { if (active) deletePlaylist(active); };
-
-els.player.onended = next;
-
-// Search
-els.openSearch.onclick = openSearch;
-els.backFromSearch.onclick = closeSearch;
-els.searchBtn.onclick = doSearch;
+// events binding
+if (els.createPlaylistBtn) els.createPlaylistBtn.onclick = createPlaylist;
+if (els.backToPlaylists) els.backToPlaylists.onclick = () => { hide(els.songsSection); };
+if (els.searchBtn) els.searchBtn.onclick = openSearch;
+if (els.importBtn) els.importBtn.onclick = openImport;
+if (els.backFromSearch) els.backFromSearch.onclick = closeSearch;
+if (els.searchDoBtn) els.searchDoBtn.onclick = doSearch;
 if (els.searchQuery) els.searchQuery.addEventListener("keydown", e => { if (e.key === "Enter") doSearch(); });
+if (els.importPreviewBtn) els.importPreviewBtn.onclick = importPreviewFetch;
+if (els.importDownloadSelected) els.importDownloadSelected.onclick = importDownloadSelected;
+if (els.backFromImport) els.backFromImport.onclick = closeImport;
 
-// Import
-els.openImport.onclick = openImport;
-els.backFromImport.onclick = closeImport;
-els.importPreviewBtn.onclick = importPreviewFetch;
-els.importDownloadSelected.onclick = importDownloadSelected;
-
-// ----------- Init ------------
+// init
 (async function init(){
-  // Ensure overlay is hidden at startup and progress reset
-  try { hide(els.progressOverlay); setProgress(0, ""); } catch(e){}
-
+  hide(els.progressOverlay);
   await loadPlaylists();
-  await loadDownloads();
 })();
