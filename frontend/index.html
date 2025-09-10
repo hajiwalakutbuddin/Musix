@@ -5,13 +5,17 @@
   <title>Musix</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="stylesheet" href="style.css" />
+  <link rel="icon" href="favicon.ico" />
 </head>
 <body>
   <nav class="navbar">
-    <div class="nav-left"><span class="brand">Musix</span></div>
+    <div class="nav-left">
+      <span class="brand">Musix</span>
+    </div>
     <div class="nav-right">
-      <button id="searchBtn" class="icon-btn" title="Search Songs">🔍</button>
-      <button id="importBtn" class="icon-btn" title="Import Playlist">📥</button>
+      <button id="undownloadedBtn" class="icon-btn" title="Undownloaded Songs">🚫<div class="small-label">Undownloaded-last-import</div></button>
+      <button id="searchBtn" class="icon-btn" title="Search Songs">🔍<div class="small-label">Search</div></button>
+      <button id="importBtn" class="icon-btn" title="Import Playlist">📥<div class="small-label">Import</div></button>
     </div>
   </nav>
 
@@ -21,16 +25,45 @@
       <ul id="playlistList"></ul>
       <div class="playlist-actions">
         <input type="text" id="newPlaylist" placeholder="New playlist name" />
-        <button id="createPlaylistBtn">Create Playlist</button>
+        <button id="createPlaylistBtn" class="btn">Create Playlist</button>
       </div>
     </section>
 
     <section id="songs" class="card hidden">
-      <h2 id="songsTitle">Songs</h2>
+      <div class="songs-header">
+        <div class="songs-title">
+          <div id="activePlaylistName" class="playlist-name">No Playlist</div>
+        </div>
+        <div class="songs-controls">
+          <button id="playAllBtn" class="btn small">▶ Play All</button>
+          <button id="deletePlaylistBtn" class="btn small danger">Delete</button>
+        </div>
+      </div>
+
       <ul id="trackList"></ul>
-      <button id="backToPlaylists" class="back-btn">← Back</button>
+
+      <div class="songs-footer">
+        <button id="backToPlaylists" class="back-btn">← Back</button>
+        <div id="nowPlaying" class="now-playing">Not playing</div>
+
+        <!-- Seekable progress bar -->
+        <div id="nowPlayingBar" class="progress-outer">
+          <div id="nowPlayingProgress" class="progress-inner"></div>
+        </div>
+
+        <!-- Repair button + note -->
+        <div class="repair-wrap">
+          <button id="repairBtn" class="btn repair-btn">Repair Playlist</button>
+          <div class="inline-note">
+            This button should be used when any imported-playlist’s song is missing.
+          </div>
+        </div>
+      </div>
     </section>
   </main>
+
+  <!-- audio player (hidden) -->
+  <audio id="player" crossorigin></audio>
 
   <!-- Search overlay -->
   <div id="searchPage" class="overlay hidden">
@@ -69,7 +102,54 @@
     </div>
   </div>
 
+  <!-- Add inside <body> alongside other overlay pages -->
+
+  <div id="undownloadedPage" class="overlay hidden">
+    <div class="overlay-box">
+      <div class="overlay-header">
+        <button id="backFromUndownloaded" class="close-btn">← Back</button>
+        <h3>Undownloaded Songs</h3>
+      </div>
+      <div id="undownloadedResults" class="results"></div>
+    </div>
+  </div>
+
+  <!-- Persistent Music Bar -->
+  <div id="musicBar" class="music-bar">
+    <button id="bottomPrevBtn" class="music-btn">⏮</button>
+    <button id="bottomPlayBtn" class="music-btn">▶</button>
+    <button id="bottomNextBtn" class="music-btn">⏭</button>
+    <button id="bottomLoopBtn" class="music-btn">🔁</button>
+    <button id="bottomShuffleBtn" class="music-btn">🔀</button>
+    <div id="bottomSongName" class="music-song-name">Not playing</div>
+    <div class="music-progress-outer">
+      <div id="musicProgressBar" class="music-progress-inner"></div>
+    </div>
+  </div>
+    <!-- Profile chooser overlay (shows at startup) -->
+  <div id="profilePage" class="overlay hidden">
+    <div class="overlay-box" style="max-width:620px; text-align:center;">
+      <div class="overlay-header" style="justify-content:center;">
+        <h2 style="margin:0; color:#fff;">Continue as</h2>
+      </div>
+
+      <div id="profilesList" class="profile-list" style="display:flex; flex-wrap:wrap; gap:10px; justify-content:center; padding:12px 6px;"></div>
+
+      <div style="padding:14px; margin-top:8px;">
+        <input id="newProfileName" placeholder="New profile name" style="width:60%; padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,0.04); background:transparent; color:#e6e6ef;" />
+        <label style="display:inline-flex; align-items:center; gap:8px; margin-left:8px; color:var(--muted); font-size:0.9rem;">
+          <input id="stayLoggedIn" type="checkbox" /> stay logged in
+        </label>
+        <div style="margin-top:12px;">
+          <button id="createProfileBtnProfile" class="btn">Create & use profile</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>
+
+
 

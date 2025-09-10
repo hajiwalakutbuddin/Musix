@@ -1,33 +1,57 @@
 // backend/server.js
-const path = require("path");
 const express = require("express");
-const bodyParser = require("body-parser");
-const cors = require("cors");
+const path = require("path");
+const fs = require("fs");
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+app.use(express.json());
 
-app.use(cors());
-app.use(bodyParser.json());
+// serve static frontend
+app.use("/", express.static(path.join(__dirname, "..", "frontend")));
 
-// serve downloads and frontend
-app.use("/downloads", express.static(path.join(__dirname, "downloads")));
-app.use(express.static(path.join(__dirname, "..", "frontend")));
+// serve profiles folder as downloads
+const PROFILES_DIR = path.join(__dirname, "..", "profiles");
+if (!fs.existsSync(PROFILES_DIR)) fs.mkdirSync(PROFILES_DIR, { recursive: true });
+app.use("/downloads", express.static(PROFILES_DIR));
 
-// API
+// routes
 const musicRoutes = require("./routes/music");
-app.use("/api", musicRoutes);
+app.use("/api/music", musicRoutes);
 
-// SPA
-app.get("/", (_req, res) => {
-  res.sendFile(path.join(__dirname, "..", "frontend", "index.html"));
+// profiles management
+const sanitize = require("./utils/sanitize");
+const { strongSanitize } = require("./utils/strongSanitize");
+
+app.get("/api/profiles", async (req, res) => {
+  try {
+    const dirs = await fs.promises.readdir(PROFILES_DIR, { withFileTypes: true });
+    const profiles = dirs.filter(d => d.isDirectory()).map(d => ({ id: d.name, displayName: d.name }));
+    res.json(profiles);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to list profiles", detail: String(err) });
+  }
 });
 
-// 404 fallback (JSON)
-app.use((req, res) => {
-  res.status(404).json({ error: "Not Found" });
+app.post("/api/profiles", async (req, res) => {
+  let { id, displayName } = req.body;
+  if (!displayName) return res.status(400).json({ error: "displayName required" });
+  id = id || displayName.toLowerCase().replace(/\s+/g, "_");
+
+  id = strongSanitize(id);
+  displayName = sanitize(displayName);
+
+  const dir = path.join(PROFILES_DIR, id);
+  try {
+    if (!fs.existsSync(dir)) {
+      await fs.promises.mkdir(path.join(dir, "playlists"), { recursive: true });
+      await fs.promises.mkdir(path.join(dir, "downloads"), { recursive: true });
+    }
+    res.json({ id, displayName });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to create profile", detail: String(err) });
+  }
 });
 
-app.listen(PORT, () => {
-  console.log(`🎵 Musix server running at http://localhost:${PORT}`);
-});
+// start server
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log("Musix server running on http://localhost:" + PORT));
