@@ -10,9 +10,13 @@
   "dependencies": {
     "body-parser": "^1.20.3",
     "cors": "^2.8.5",
+    "dotenv": "^17.2.2",
     "express": "^5.1.0",
+    "express-session": "^1.18.2",
     "ffmpeg-static": "^4.4.0",
     "fluent-ffmpeg": "^2.1.2",
+    "multer": "^2.0.2",
+    "node-fetch": "^2.7.0",
     "yt-dlp-exec": "^1.0.2"
   },
   "devDependencies": {

@@ -11,6 +11,13 @@
   <nav class="navbar">
     <div class="nav-left">
       <span class="brand">Musix</span>
+      <!-- <button id="profileBtn" class="profile-circle"></button> -->
+      <!-- <div id="profileButton" class="profile-btn">
+        <img id="profileAvatarImg" class="avatar hidden" alt="Profile avatar" />
+        <span id="profileInitials" class="initials"></span>
+      </div> -->
+      <button id="profileBtn" class="profile-circle" aria-label="Profile"></button>
+
     </div>
     <div class="nav-right">
       <button id="undownloadedBtn" class="icon-btn" title="Undownloaded Songs">🚫<div class="small-label">Undownloaded-last-import</div></button>
@@ -78,7 +85,7 @@
   </div>
 
   <!-- Import overlay -->
-  <div id="importPage" class="overlay hidden">
+  <!-- <div id="importPage" class="overlay hidden">
     <div class="overlay-box">
       <div class="overlay-header">
         <button id="backFromImport" class="close-btn">← Back</button>
@@ -90,7 +97,57 @@
         <button id="importDownloadSelected" class="btn">Download Selected</button>
       </div>
     </div>
+  </div> -->
+<!-- Import overlay -->
+<div id="importPage" class="overlay hidden">
+  <div class="overlay-box">
+    <div class="overlay-header">
+      <button id="backFromImport" class="close-btn">← Back</button>
+      <h2>Import</h2>
+    </div>
+
+    <!-- Tabs -->
+    <div class="import-tabs">
+      <button id="tabYoutube" class="active">YouTube</button>
+      <button id="tabSpotify">Spotify</button>
+    </div>
+
+    <!-- YouTube Import Section -->
+    <div id="youtubeImportSection">
+      <!-- keep your existing YouTube import UI here -->
+    </div>
+
+    <!-- Spotify Import Section -->
+    <div id="spotifyImportSection" class="hidden">
+      <!-- Login -->
+      <div id="spotifyAuthSection" style="text-align:center; margin:20px 0;">
+        <button id="spotifyLoginBtn" class="btn large">Login with Spotify</button>
+      </div>
+
+      <!-- Private Playlists -->
+      <div id="spotifyPlaylistsSection" class="hidden">
+        <h3 style="text-align:center;">My Spotify Playlists</h3>
+        <div id="spotifyPlaylists" class="results"></div>
+      </div>
+
+      <!-- Public Search -->
+      <div id="spotifyPublicSection">
+        <h3 style="text-align:center;">Search Public Playlists</h3>
+        <div style="display:flex; justify-content:center; gap:10px; margin-bottom:15px;">
+          <input id="spotifySearchInput" type="text" placeholder="Search or paste Spotify playlist URL" style="flex:1; max-width:400px;" />
+          <button id="spotifySearchBtn" class="btn">Search</button>
+        </div>
+        <div id="spotifySearchResults" class="results"></div>
+      </div>
+    </div>
+
+    <!-- Common Import Results -->
+    <div id="importResults" class="results"></div>
+    <div style="padding:12px;text-align:right;">
+      <button id="importDownloadSelected" class="btn">Download Selected</button>
+    </div>
   </div>
+</div>
 
   <!-- Progress overlay -->
   <div id="progressOverlay" class="loading-overlay hidden">
@@ -146,6 +203,26 @@
       </div>
     </div>
   </div>
+
+  <div id="profileOverlay" class="overlay hidden">
+    <div class="overlay-box" style="max-width:500px; text-align:center;">
+      <div class="overlay-header" style="justify-content:space-between;">
+        <button id="backFromProfile" class="close-btn">← Back</button>
+        <h2 id="profileOverlayName">Profile</h2>
+      </div>
+
+      <div class="profile-avatar-wrap">
+        <div id="profileAvatar" class="profile-avatar">??</div>
+      </div>
+
+      <div style="margin-top:20px;">
+        <button id="editProfileBtn" class="btn">✏️ Edit Profile</button>
+        <button id="uploadPicBtn" class="btn">📷 Upload Picture</button>
+        <button id="logoutBtn" class="btn danger">🚪 Logout</button>
+      </div>
+    </div>
+  </div>
+
 
   <script src="app.js"></script>
 </body>
