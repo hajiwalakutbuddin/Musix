@@ -403,3 +403,14 @@ button.btn:hover { opacity:0.98; transform:translateY(-1px); transition: all 120
   font-size: 1.1rem;
   margin: 0 auto;
 }
+/* make import modal body scrollable so search bar is reachable */
+#importPage, #importPage .content {
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+/* ensure spotify playlists / search sections don't exceed viewport */
+#spotifyPlaylistsSection, #spotifyPublicSection {
+  max-height: 60vh;
+  overflow-y: auto;
+}

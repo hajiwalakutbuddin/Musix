@@ -9,7 +9,13 @@ let queue = [];  // queued { fileUrl, title }
 let currentIndex = -1;
 let isLoop = false;
 let isShuffle = false;
+//--------------------------------------------
+// --- Spotify helper state ---
+let spotifyTracks = [];            // [{ id: spotifyTrackId, title: "Song — Artist" }, ...]
+let spotifyCurrentPlaylistId = ""; // spotify playlist id for import
+let spotifyCurrentPlaylistName = ""; // playlist name for import
 
+//-----------------------------------
 // Elements
 const els = {
   playlistList: document.getElementById("playlistList"),
@@ -594,25 +600,99 @@ async function importPreviewFetch() {
   }
 }
 
+// async function importDownloadSelected() {
+//   if (!active) return alert("Select a playlist first from the left sidebar.");
+//   const checks = Array.from(document.querySelectorAll(".import-check"));
+//   const ids = checks.filter(c => c.checked).map(c => c.value);
+//   if (!ids.length) return alert("Select at least one track.");
+//   const url = els.importUrl.value.trim();
+//   if (!url) return alert("Missing original import URL.");
+
+//   try {
+//     const { jobId } = await fetchJSON(`${API}/import/download`, {
+//       method: "POST",
+//       headers: { "Content-Type": "application/json" },
+//       body: JSON.stringify({
+//         profileId: activeProfile?.id,
+//         name: active,
+//         selectedIds: ids,
+//         url   // 👈 send url for title fallback
+//       })
+//     });
+//     const jobResult = await trackJob(jobId);
+//     await loadPlaylistTracks(active);
+//     await loadDownloads();
+//     if (jobResult && jobResult.failed && jobResult.failed.length) {
+//       setUndownloaded(jobResult.failed);
+//       showUndownloadedPage();
+//     }
+//     closeImport();
+//   } catch (e) {
+//     console.error("Import download failed:", e);
+//     alert("Import download failed: " + (e.message || e));
+//   }
+// }
 async function importDownloadSelected() {
   if (!active) return alert("Select a playlist first from the left sidebar.");
   const checks = Array.from(document.querySelectorAll(".import-check"));
   const ids = checks.filter(c => c.checked).map(c => c.value);
   if (!ids.length) return alert("Select at least one track.");
-  const url = els.importUrl.value.trim();
-  if (!url) return alert("Missing original import URL.");
 
+  // Helper to test likely YouTube id (11 chars typical)
+  const isYouTubeId = (s) => /^[A-Za-z0-9_-]{11}$/.test(s);
+
+  // If ids are youtube ids, just call backend directly
+  let videoIds = [];
+  if (ids.every(isYouTubeId)) {
+    videoIds = ids;
+  } else {
+    // We assume they are Spotify track ids -> map each to a YouTube video id
+    if (!spotifyTracks || !spotifyTracks.length) {
+      return alert("No Spotify track data available. Re-open the playlist before importing.");
+    }
+
+    // Build a map of spotifyId -> search query (title string we stored earlier)
+    const idToQuery = {};
+    for (const t of spotifyTracks) idToQuery[t.id] = t.title;
+
+    videoIds = [];
+    // sequential mapping (keeps load predictable); can be parallelized if desired
+    for (const sid of ids) {
+      const q = idToQuery[sid] || sid;
+      try {
+        const searchRes = await fetchJSON(`${API}/search?q=${encodeURIComponent(q)}`);
+        const top = (searchRes.results || [])[0];
+        if (top && top.id) {
+          videoIds.push(top.id);
+        } else {
+          // push a placeholder so import knows one failed; we'll remove later
+          console.warn("No search result for", q);
+        }
+        // small pause to avoid hammering
+        await new Promise(r => setTimeout(r, 250));
+      } catch (e) {
+        console.warn("Search failed for", q, e);
+      }
+    }
+
+    if (!videoIds.length) return alert("Could not find any YouTube matches for the selected tracks.");
+  }
+
+  // finally call import/download backend
   try {
+    // use spotify playlist url as "url" param so backend can prefetch titles if needed
+    const playlistUrl = spotifyCurrentPlaylistId ? `spotify:playlist:${spotifyCurrentPlaylistId}` : (els.importUrl?.value || "");
     const { jobId } = await fetchJSON(`${API}/import/download`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         profileId: activeProfile?.id,
         name: active,
-        selectedIds: ids,
-        url   // 👈 send url for title fallback
+        selectedIds: videoIds,
+        url: playlistUrl
       })
     });
+
     const jobResult = await trackJob(jobId);
     await loadPlaylistTracks(active);
     await loadDownloads();
@@ -620,12 +700,14 @@ async function importDownloadSelected() {
       setUndownloaded(jobResult.failed);
       showUndownloadedPage();
     }
+    // close import UI
     closeImport();
   } catch (e) {
     console.error("Import download failed:", e);
     alert("Import download failed: " + (e.message || e));
   }
 }
+
 
 
 // ----------- Progress overlay ------------
@@ -1113,28 +1195,47 @@ if (spotifyLoginBtn) {
 //--------------------------------------------------------------------------
 // After page load, check for spotify login redirect token
 // Detect Spotify login redirect
-(function checkSpotifyRedirect() {
-  const params = new URLSearchParams(window.location.search);
-  if (params.get("spotify") === "success") {
-    history.replaceState(null, "", window.location.pathname); // clean URL
-    fetch("/api/spotify/me").then(r => r.json()).then(user => {
-      if (!user.error) {
-        onSpotifyLoggedIn(user);
-        // load playlists
-        fetch("/api/spotify/playlists")
-          .then(r => r.json())
-          .then(pl => renderSpotifyPlaylists(pl));
-      }
-    });
+// On load: check if user is already logged in to Spotify
+(async function checkSpotifyLoggedInOnLoad() {
+  try {
+    const r = await fetch("/api/spotify/me", { credentials: "include" });
+    if (!r.ok) return; // not logged in
+    const user = await r.json();
+    if (!user || user.error) return;
+    // update UI & load playlists
+    onSpotifyLoggedIn(user);
+    // fetch first page of playlists (server endpoint will paginate if needed)
+    try {
+      const pl = await fetch(`/api/spotify/playlists`, { credentials: "include" }).then(x => x.json());
+      renderSpotifyPlaylists(pl);
+    } catch (e) {
+      console.warn("Failed to fetch spotify playlists on load:", e);
+    }
+  } catch (e) {
+    // not logged in or network error - ignore
   }
 })();
+
+
 
 //--------------------------------------------------------------------
 function onSpotifyLoggedIn(user) {
   hide(document.getElementById("spotifyAuthSection"));
   show(document.getElementById("spotifyPlaylistsSection"));
+
   const btn = document.getElementById("spotifyLoginBtn");
-  if (btn) btn.textContent = `Logged in: ${user.display_name || user.id}`;
+  if (btn) {
+    btn.textContent = `Logged in: ${user.display_name || user.id || "Spotify"}`;
+    btn.classList.add("connected");
+    // optionally disable clicking to avoid re-login
+    btn.onclick = null;
+  }
+
+  // fetch playlists (defensive)
+  fetch("/api/spotify/playlists", { credentials: "include" })
+    .then(r => r.json())
+    .then(pl => renderSpotifyPlaylists(pl))
+    .catch(e => console.warn("Failed to fetch spotify playlists:", e));
 }
 
 function renderSpotifyPlaylists(data) {
@@ -1154,26 +1255,42 @@ function renderSpotifyPlaylists(data) {
 }
 
 window.selectSpotifyPlaylist = async function(id, name) {
-  const res = await fetchJSON(`/api/spotify/playlists/${encodeURIComponent(id)}/tracks`);
-  const items = res.items || [];
-  const results = items.map(it => {
-    const t = it.track;
-    return {
-      id: t.id,
-      title: `${t.name} — ${(t.artists||[]).map(a=>a.name).join(", ")}`
-    };
-  });
-  const box = document.getElementById("importResults");
-  box.innerHTML = results.map(r => `
-    <div class="import-row">
-      <label>
-        <input type="checkbox" class="import-check" value="${r.id}" checked />
-        ${r.title}
-      </label>
-    </div>
-  `).join("");
-  show(document.getElementById("importResults"));
+  try {
+    spotifyCurrentPlaylistId = id;
+    spotifyCurrentPlaylistName = name;
+    const res = await fetchJSON(`/api/spotify/playlists/${encodeURIComponent(id)}/tracks`, { credentials: "include" });
+    const items = res.items || [];
+    // create friendly titles "Song — Artist1, Artist2"
+    spotifyTracks = items.map(it => {
+      const t = it.track || it; // defensive depending on API shape
+      const title = `${t.name} — ${(t.artists||[]).map(a=>a.name).join(", ")}`;
+      return { id: t.id, title };
+    });
+
+    // render checkboxes for import selection
+    const box = document.getElementById("importResults");
+    if (!box) return;
+    box.innerHTML = spotifyTracks.map(r => `
+      <div class="import-row">
+        <label style="display:flex; align-items:center; gap:8px;">
+          <input type="checkbox" class="import-check" value="${r.id}" checked />
+          <span>${r.title}</span>
+        </label>
+      </div>
+    `).join("");
+
+    show(document.getElementById("importResults"));
+    // ensure import panel shows Spotify section
+    setActiveImportTab("spotify");
+    // scroll to importResults so user sees checkboxes
+    document.getElementById("importResults").scrollIntoView({ behavior: "smooth", block: "start" });
+
+  } catch (e) {
+    console.error("Failed to fetch Spotify playlist tracks:", e);
+    alert("Failed to load playlist tracks: " + (e.message || e));
+  }
 };
+
 
 //-------------------------------------------------------------------------
 

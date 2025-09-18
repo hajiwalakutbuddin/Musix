@@ -76,125 +76,25 @@
 // backend/routes/spotify.js
 const express = require("express");
 const router = express.Router();
-const fetch = require("node-fetch");
+// prefer global fetch if available, fallback to node-fetch
+const fetch = globalThis.fetch || require("node-fetch"); // npm i node-fetch@2
 require("dotenv").config();
 
 const clientId = process.env.SPOTIFY_CLIENT_ID;
 const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
 const redirectUri = process.env.SPOTIFY_REDIRECT_URI;
+const querystring = require("querystring");
 
-if (!clientId || !clientSecret || !redirectUri) {
-  console.warn("Spotify client credentials not configured. Set SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, SPOTIFY_REDIRECT_URI in .env");
+// helper: random state
+function makeState(len = 16) {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  let s = "";
+  for (let i = 0; i < len; i++) s += chars[Math.floor(Math.random() * chars.length)];
+  return s;
 }
 
-// Utility: simple POST form helper
-async function postForm(url, form) {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams(form)
-  });
-  return res.json();
-}
-
-// Step 1: Redirect user to Spotify login
-// router.get("/login", (req, res) => {
-//   const scope = [
-//     "playlist-read-private",
-//     "playlist-read-collaborative",
-//     "user-read-email",
-//     "user-read-private"
-//   ].join(" ");
-
-//   const authUrl = new URL("https://accounts.spotify.com/authorize");
-//   authUrl.searchParams.set("client_id", clientId);
-//   authUrl.searchParams.set("response_type", "code");
-//   authUrl.searchParams.set("redirect_uri", redirectUri);
-//   authUrl.searchParams.set("scope", scope);
-//   // optional state parameter
-//   const state = Math.random().toString(36).slice(2);
-//   req.session.spotifyAuthState = state;
-//   authUrl.searchParams.set("state", state);
-//   res.redirect(authUrl.toString());
-// });
-// Step 1: Redirect user to Spotify login
-router.get("/login", (req, res) => {
-  const scope = [
-    "playlist-read-private",
-    "playlist-read-collaborative",
-    "user-read-email",
-    "user-read-private"
-  ].join(" ");
-
-  // generate random state
-  const state = Math.random().toString(36).substring(2, 15);
-  req.session = req.session || {};
-  req.session.spotifyState = state;
-
-  const authUrl = new URL("https://accounts.spotify.com/authorize");
-  authUrl.searchParams.set("client_id", clientId);
-  authUrl.searchParams.set("response_type", "code");
-  authUrl.searchParams.set("redirect_uri", redirectUri);
-  authUrl.searchParams.set("scope", scope);
-  authUrl.searchParams.set("state", state);
-
-  res.redirect(authUrl.toString());
-});
-
-
-// Step 2: Handle callback
-// router.get("/callback", async (req, res) => {
-//   const code = req.query.code;
-//   const state = req.query.state;
-//   if (!code) return res.status(400).send("Missing code");
-
-//   if (!state || state !== req.session.spotifyAuthState) {
-//     // state mismatch, but don't crash — continue but warn
-//     console.warn("Spotify state mismatch (or missing)");
-//   }
-
-//   try {
-//     const tokenData = await postForm("https://accounts.spotify.com/api/token", {
-//       grant_type: "authorization_code",
-//       code,
-//       redirect_uri: redirectUri,
-//       client_id: clientId,
-//       client_secret: clientSecret
-//     });
-
-//     if (tokenData.error) {
-//       console.error("Spotify token error:", tokenData);
-//       return res.status(400).json(tokenData);
-//     }
-
-//     // Store tokens in server session
-//     req.session.spotify = {
-//       access_token: tokenData.access_token,
-//       refresh_token: tokenData.refresh_token,
-//       expires_in: tokenData.expires_in,
-//       obtained_at: Date.now()
-//     };
-
-//     // Redirect back to frontend — same tab
-//     res.redirect("/?spotify=success");
-//   } catch (err) {
-//     console.error("Spotify callback error:", err);
-//     res.status(500).send("Spotify auth failed");
-//   }
-// });
-// Step 2: Handle callback
-router.get("/callback", async (req, res) => {
-  const code = req.query.code;
-  const state = req.query.state;
-
-  if (!code) return res.status(400).send("Missing code");
-  if (!state || state !== (req.session && req.session.spotifyState)) {
-    return res.status(400).send("Spotify state mismatch (or missing)");
-  }
-
-  // clear it so it can’t be reused
-  delete req.session.spotifyState;
-
+// helper: token exchange
+async function exchangeCodeForTokens(code) {
   const tokenRes = await fetch("https://accounts.spotify.com/api/token", {
     method: "POST",
     headers: {
@@ -205,115 +105,218 @@ router.get("/callback", async (req, res) => {
       grant_type: "authorization_code",
       code,
       redirect_uri: redirectUri
-    })
+    }).toString()
   });
-
-  const data = await tokenRes.json();
-  if (data.error) return res.status(400).json(data);
-
-  // Save tokens in session
-  req.session.spotify = data;
-
-  // Redirect back to frontend
-  res.redirect("/?spotify=success");
-});
-
-
-
-// Helper to ensure we have a valid access token (basic refresh logic)
-async function ensureAccessToken(req) {
-  if (!req.session || !req.session.spotify) throw new Error("Not logged in to Spotify");
-  const s = req.session.spotify;
-  const expiresAt = (s.obtained_at || 0) + ((s.expires_in || 0) * 1000) - 5000; // refresh 5s early
-  if (Date.now() < expiresAt && s.access_token) return s.access_token;
-
-  // refresh
-  const refreshRes = await postForm("https://accounts.spotify.com/api/token", {
-    grant_type: "refresh_token",
-    refresh_token: s.refresh_token,
-    client_id: clientId,
-    client_secret: clientSecret
-  });
-
-  if (refreshRes.error) throw new Error("Failed refreshing token: " + JSON.stringify(refreshRes));
-  s.access_token = refreshRes.access_token;
-  s.expires_in = refreshRes.expires_in || s.expires_in;
-  s.obtained_at = Date.now();
-  req.session.spotify = s;
-  return s.access_token;
+  return tokenRes.json();
 }
 
-// Logout
-router.get("/logout", (req, res) => {
-  if (req.session) {
-    delete req.session.spotify;
-    delete req.session.spotifyAuthState;
-  }
-  res.json({ success: true });
+async function refreshAccessToken(refresh_token) {
+  const tokenRes = await fetch("https://accounts.spotify.com/api/token", {
+    method: "POST",
+    headers: {
+      "Authorization": "Basic " + Buffer.from(`${clientId}:${clientSecret}`).toString("base64"),
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token
+    }).toString()
+  });
+  return tokenRes.json();
+}
+
+function saveTokensToSession(sess, tokenData) {
+  const now = Date.now();
+  // tokenData contains access_token, token_type, expires_in, refresh_token maybe
+  sess.spotify = sess.spotify || {};
+  sess.spotify.access_token = tokenData.access_token;
+  if (tokenData.refresh_token) sess.spotify.refresh_token = tokenData.refresh_token;
+  // expires_at (ms)
+  sess.spotify.expires_at = now + (tokenData.expires_in || 3600) * 1000;
+}
+
+// ensure access token valid and refresh if needed
+async function ensureValidAccessToken(req) {
+  if (!req.session || !req.session.spotify) throw new Error("Not authenticated with Spotify");
+  const s = req.session.spotify;
+  const now = Date.now();
+  if (!s.access_token) throw new Error("No access token");
+  if (s.expires_at && s.expires_at > now + 5000) return s.access_token; // still valid
+  if (!s.refresh_token) throw new Error("No refresh token available");
+  // refresh
+  const fresh = await refreshAccessToken(s.refresh_token);
+  if (fresh.error) throw new Error(JSON.stringify(fresh));
+  saveTokensToSession(req.session, fresh);
+  return req.session.spotify.access_token;
+}
+
+// Step 1: redirect to Spotify authorize URL
+router.get("/login", (req, res) => {
+  // Generate and save state for CSRF protection
+  const state = makeState(24);
+  req.session.spotifyState = state;
+  console.log("[/login] Generated state =", state);
+  console.log("[/login] Session ID =", req.sessionID);
+  console.log("[/login] Session object =", req.session);
+  console.log("[/login] Set-Cookie header will be:", res.getHeader("Set-Cookie"));
+
+  const scope = [
+    "playlist-read-private",
+    "playlist-read-collaborative",
+    "user-read-email",
+    "user-read-private",
+  ].join(" ");
+
+  const authUrl = new URL("https://accounts.spotify.com/authorize");
+  authUrl.searchParams.set("client_id", clientId);
+  authUrl.searchParams.set("response_type", "code");
+  // use configured redirectUri (must match Spotify app setting)
+  authUrl.searchParams.set("redirect_uri", redirectUri || "http://127.0.0.1:5000/api/spotify/callback");
+  authUrl.searchParams.set("scope", scope);
+  authUrl.searchParams.set("state", state);
+
+  // Optional: force Spotify to ask user every time
+  // authUrl.searchParams.set("show_dialog", "true");
+
+  res.redirect(authUrl.toString());
 });
 
-// Me endpoint: basic profile
+// Step 2: callback — validate state and exchange code
+router.get("/callback", async (req, res) => {
+  const code = req.query.code || null;
+  const state = req.query.state || null;
+
+  if (!code) {
+    return res.status(400).send("No code found");
+  }
+  console.log("[/callback] query.state =", state);
+  console.log("[/callback] session.spotifyState =", req.session && req.session.spotifyState);
+  console.log("[/callback] Session ID =", req.sessionID);
+  console.log("[/callback] Session object =", req.session);
+  console.log("[/callback] Raw cookies sent by browser =", req.headers.cookie);
+  console.log("[callback] Cookies received =", req.headers.cookie);
+  console.log("[callback] Session ID (server) =", req.sessionID);
+
+
+  // validate state
+  if (!state || !req.session || req.session.spotifyState !== state) {
+    return res.status(400).send("Invalid or missing Spotify state (CSRF check failed)");
+  }
+  // clear stored state once used
+  delete req.session.spotifyState;
+  console.log("[/callback] State validated and cleared.");
+
+  try {
+    const body = querystring.stringify({
+      grant_type: "authorization_code",
+      code: code,
+      redirect_uri: redirectUri || "http://127.0.0.1:5000/api/spotify/callback",
+    });
+
+    const tokenResponse = await fetch("https://accounts.spotify.com/api/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization:
+          "Basic " + Buffer.from(clientId + ":" + clientSecret).toString("base64"),
+      },
+      body: body,
+    });
+
+    const data = await tokenResponse.json();
+
+    console.log("Spotify token response:", data);
+
+    if (data.error) {
+      console.error("Spotify token error:", data);
+      return res.status(400).send("Failed to get tokens: " + (data.error_description || data.error));
+    }
+
+    // ✅ Save tokens correctly
+    saveTokensToSession(req.session, data);
+
+    // Redirect back to frontend import page. Use configured FRONTEND_URL or default
+    const frontendBase = process.env.FRONTEND_URL || `http://127.0.0.1:${process.env.PORT || 5000}`;
+    return res.redirect(`${frontendBase}/import?connected=spotify`);
+
+  } catch (err) {
+    console.error("Error during token exchange:", err);
+    res.status(500).send("Internal Server Error");
+  }
+});
+
+// (Helper) current user profile
 router.get("/me", async (req, res) => {
   try {
-    const token = await ensureAccessToken(req);
-    const r = await fetch("https://api.spotify.com/v1/me", { headers: { Authorization: `Bearer ${token}` } });
-    const j = await r.json();
-    res.json(j);
+    const token = await ensureValidAccessToken(req);
+    const response = await fetch("https://api.spotify.com/v1/me", {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const data = await response.json();
+    res.json(data);
   } catch (err) {
-    res.status(401).json({ error: "Not logged in" });
+    res.status(401).json({ error: "Not logged in", detail: String(err) });
   }
 });
 
-// Get user's playlists (paginated - we return first page)
+// Get current user's playlists (paginated)
 router.get("/playlists", async (req, res) => {
   try {
-    const token = await ensureAccessToken(req);
-    const r = await fetch("https://api.spotify.com/v1/me/playlists?limit=50", { headers: { Authorization: `Bearer ${token}` } });
-    const j = await r.json();
-    res.json(j);
+    const token = await ensureValidAccessToken(req);
+    const response = await fetch("https://api.spotify.com/v1/me/playlists?limit=50", {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const data = await response.json();
+    res.json(data);
   } catch (err) {
-    res.status(401).json({ error: "Not logged in" });
+    res.status(401).json({ error: "Not logged in", detail: String(err) });
   }
 });
 
-// Get tracks for a playlist (playlistId param)
+// Get tracks for a playlist id (playlist owned/public)
 router.get("/playlists/:id/tracks", async (req, res) => {
   try {
-    const token = await ensureAccessToken(req);
-    const playlistId = req.params.id;
-    // Spotify returns paging. We fetch first 100 items for simplicity.
-    const r = await fetch(`https://api.spotify.com/v1/playlists/${encodeURIComponent(playlistId)}/tracks?limit=100`, { headers: { Authorization: `Bearer ${token}` } });
-    const j = await r.json();
-    res.json(j);
+    const token = await ensureValidAccessToken(req);
+    const id = req.params.id;
+    const response = await fetch(`https://api.spotify.com/v1/playlists/${encodeURIComponent(id)}/tracks?limit=100`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const data = await response.json();
+    res.json(data);
   } catch (err) {
-    res.status(401).json({ error: "Not logged in" });
+    res.status(401).json({ error: "Not logged in", detail: String(err) });
   }
 });
 
-// Search public playlists (by query)
+// Search public playlists (by q) or accept playlist url
 router.get("/search", async (req, res) => {
   try {
     const q = (req.query.q || "").trim();
-    if (!q) return res.json({ playlists: [] });
-    // Use client credentials flow to search public content if not logged in — but here we will try to use client creds
-    // We'll get an app token using client credentials (no user).
-    const tokenResp = await postForm("https://accounts.spotify.com/api/token", {
-      grant_type: "client_credentials",
-      client_id: clientId,
-      client_secret: clientSecret
-    });
-    if (tokenResp.error) return res.status(500).json({ error: "Spotify client token error", detail: tokenResp });
+    if (!q) return res.status(400).json({ error: "q required" });
 
-    const token = tokenResp.access_token;
-    // Search for playlists
-    const r = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=playlist&limit=20`, { headers: { Authorization: `Bearer ${token}` } });
-    const j = await r.json();
-    res.json(j);
+    // If a Spotify playlist URL/URI is pasted, extract ID and return that playlist
+    const playlistIdMatch = q.match(/playlist[\/:]([a-zA-Z0-9]+)|spotify:playlist:([a-zA-Z0-9]+)/);
+    if (playlistIdMatch) {
+      const id = (playlistIdMatch[1] || playlistIdMatch[2]);
+      const response = await fetch(`https://api.spotify.com/v1/playlists/${encodeURIComponent(id)}`, {
+        headers: { Authorization: `Bearer ${await ensureValidAccessToken(req)}` }
+      });
+      const playlist = await response.json();
+      return res.json({ playlists: { items: [playlist] } });
+    }
+
+    // Otherwise search for playlists by query
+    const token = await ensureValidAccessToken(req);
+    const response = await fetch(`https://api.spotify.com/v1/search?type=playlist&q=${encodeURIComponent(q)}&limit=20`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const data = await response.json();
+    res.json(data);
   } catch (err) {
-    console.error("Spotify search error:", err);
-    res.status(500).json({ error: "Search failed", detail: String(err) });
+    res.status(401).json({ error: "Not logged in", detail: String(err) });
   }
 });
 
 module.exports = router;
+
 
