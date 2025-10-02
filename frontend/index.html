@@ -84,20 +84,6 @@
     </div>
   </div>
 
-  <!-- Import overlay -->
-  <!-- <div id="importPage" class="overlay hidden">
-    <div class="overlay-box">
-      <div class="overlay-header">
-        <button id="backFromImport" class="close-btn">← Back</button>
-        <input id="importUrl" placeholder="YouTube playlist URL" />
-        <button id="importPreviewBtn" class="btn">Preview</button>
-      </div>
-      <div id="importResults" class="results"></div>
-      <div style="padding:12px;text-align:right;">
-        <button id="importDownloadSelected" class="btn">Download Selected</button>
-      </div>
-    </div>
-  </div> -->
 <!-- Import overlay -->
 <div id="importPage" class="overlay hidden">
   <div class="overlay-box">
@@ -114,7 +100,12 @@
 
     <!-- YouTube Import Section -->
     <div id="youtubeImportSection">
-      <!-- keep your existing YouTube import UI here -->
+      <h3 style="text-align:center;">Import from YouTube</h3>
+      <div style="display:flex; justify-content:center; gap:10px; margin-bottom:15px;">
+        <input id="importUrl" type="text" placeholder="YouTube playlist or video URL" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="flex:1; max-width:400px;" />
+        <button id="importPreviewBtn" class="btn">Preview</button>
+      </div>
+      <!-- Results will be shown in the shared #importResults below -->
     </div>
 
     <!-- Spotify Import Section -->
@@ -134,20 +125,22 @@
       <div id="spotifyPublicSection">
         <h3 style="text-align:center;">Search Public Playlists</h3>
         <div style="display:flex; justify-content:center; gap:10px; margin-bottom:15px;">
-          <input id="spotifySearchInput" type="text" placeholder="Search or paste Spotify playlist URL" style="flex:1; max-width:400px;" />
+          <input id="spotifySearchInput" type="text" placeholder="Search or paste Spotify playlist URL" style="flex:1; max-width:400px;" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
           <button id="spotifySearchBtn" class="btn">Search</button>
         </div>
         <div id="spotifySearchResults" class="results"></div>
       </div>
     </div>
 
-    <!-- Common Import Results -->
+    <!-- Shared Import Results -->
     <div id="importResults" class="results"></div>
     <div style="padding:12px;text-align:right;">
       <button id="importDownloadSelected" class="btn">Download Selected</button>
     </div>
   </div>
 </div>
+
+
 
   <!-- Progress overlay -->
   <div id="progressOverlay" class="loading-overlay hidden">
@@ -219,6 +212,7 @@
         <button id="editProfileBtn" class="btn">✏️ Edit Profile</button>
         <button id="uploadPicBtn" class="btn">📷 Upload Picture</button>
         <button id="logoutBtn" class="btn danger">🚪 Logout</button>
+        <button id="deleteProfileBtn" class="btn danger">🗑 Delete Profile</button>
       </div>
     </div>
   </div>
