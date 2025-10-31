@@ -414,3 +414,21 @@ button.btn:hover { opacity:0.98; transform:translateY(-1px); transition: all 120
   max-height: 60vh;
   overflow-y: auto;
 }
+
+/* add near your track / row styles */
+.track-thumb {
+  width: 56px;
+  height: 56px;
+  border-radius: 6px;
+  object-fit: cover;
+  background: #222; /* small neutral bg while loading */
+  flex: 0 0 56px;
+}
+.track-thumb.placeholder {
+  display: inline-block;
+  background: linear-gradient(90deg, #2b2b2b, #222);
+  opacity: 0.6;
+}
+.row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 12px; }
+.row-title .title-text { font-weight:500; }
+.meta.small { font-size:12px; color:var(--muted); margin-top:2px; }

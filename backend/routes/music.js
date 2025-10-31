@@ -18,6 +18,40 @@ const ROOT = path.join(__dirname, "..", "..");
 const PROFILES_DIR = path.join(ROOT, "profiles");
 if (!fs.existsSync(PROFILES_DIR)) fs.mkdirSync(PROFILES_DIR, { recursive: true });
 
+
+// add near other requires at top
+const mm = require("music-metadata"); // npm i music-metadata
+// simple in-memory cache for thumbnails: key = absolute file path
+const thumbCache = new Map();
+
+// extract embedded album art as data URI (cached)
+async function extractThumbnailDataUri(filePath) {
+  try {
+    if (thumbCache.has(filePath)) return thumbCache.get(filePath); // may be null
+    // parseFile is safe for mp3s; set muted options to avoid long native reads
+    const meta = await mm.parseFile(filePath, { duration: false, skipCovers: false });
+    const pic = (meta && meta.common && meta.common.picture && meta.common.picture[0]) || null;
+    if (!pic) {
+      thumbCache.set(filePath, null);
+      return null;
+    }
+    const format = pic.format?.replace("jpg", "jpeg") || "image/jpeg";
+
+    const base64 = Buffer.from(pic.data).toString("base64");
+    const dataUri = `data:${pic.format};base64,${base64}`;
+
+    console.log("Thumbnail:", dataUri.slice(0, 100) + "...");
+
+    thumbCache.set(filePath, dataUri);
+    return dataUri;
+  } catch (err) {
+    // on error, cache null so we don't retry repeatedly in a tight loop
+    thumbCache.set(filePath, null);
+    return null;
+  }
+}
+
+
 // locate yt-dlp
 function findYtdlp() {
   const candidates = [
@@ -123,14 +157,39 @@ router.get("/playlist/:profileId/:name", async (req, res) => {
     const id = await ensureProfile(profileId);
     const dir = path.join(PROFILES_DIR, id, "playlists", name);
     if (!fs.existsSync(dir)) return res.json({ name, songs: [] });
+    // const files = (await fsp.readdir(dir)).filter(f => f.toLowerCase().endsWith(".mp3"));
+    // const songs = files.map(f => ({
+    //   id: (f.match(/\[([a-zA-Z0-9_-]{6,})\]/)||[])[1] || f,
+    //   title: f.replace(/\s*\[[^\]]+\]\.mp3$/i, "").trim(),
+    //   filename: f,
+    //   fileUrl: `/downloads/${encodeURIComponent(id)}/playlists/${encodeURIComponent(name)}/${encodeURIComponent(f)}`
+    // }));
+    // res.json({ name, songs });
     const files = (await fsp.readdir(dir)).filter(f => f.toLowerCase().endsWith(".mp3"));
-    const songs = files.map(f => ({
-      id: (f.match(/\[([a-zA-Z0-9_-]{6,})\]/)||[])[1] || f,
-      title: f.replace(/\s*\[[^\]]+\]\.mp3$/i, "").trim(),
-      filename: f,
-      fileUrl: `/downloads/${encodeURIComponent(id)}/playlists/${encodeURIComponent(name)}/${encodeURIComponent(f)}`
+
+    // build songs array by extracting thumbnails in parallel (cached)
+    const songs = await Promise.all(files.map(async (f) => {
+      const idMatch = (f.match(/\[([a-zA-Z0-9_-]{6,})\]/)||[])[1] || f;
+      const title = f.replace(/\s*\[[^\]]+\]\.mp3$/i, "").trim();
+      const fileUrl = `/downloads/${encodeURIComponent(id)}/playlists/${encodeURIComponent(name)}/${encodeURIComponent(f)}`;
+      const fullPath = path.join(dir, f);
+      let thumbnail = null;
+      try {
+        thumbnail = await extractThumbnailDataUri(fullPath);
+      } catch (e) {
+        thumbnail = null;
+      }
+      return {
+        id: idMatch,
+        title,
+        filename: f,
+        fileUrl,
+        thumbnail // data URI or null
+      };
     }));
+
     res.json({ name, songs });
+
   } catch (err) { res.status(500).json({ error: "Failed to read playlist", detail: String(err) }); }
 });
 

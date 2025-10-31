@@ -287,22 +287,62 @@ async function loadPlaylistTracks(name) {
   }
 }
 
+// function renderTracks() {
+//   if (!tracks.length) {
+//     els.trackList.innerHTML = `<li class="row"><div class="row-title">No downloaded tracks yet.</div></li>`;
+//     return;
+//   }
+//   els.trackList.innerHTML = tracks.map((t, i) => `
+//     <li class="row">
+//       <div class="row-title">${t.title}</div>
+//       <div class="track-actions">
+//         <button class="btn small" onclick="playIndex(${i})">Play</button>
+//         <button class="btn queue" onclick="queueTrack(${i})">Queue</button>
+//         <button class="btn small danger" onclick="deleteTrack('${t.filename.replace(/'/g,"\\'")}')">❌</button>
+//       </div>
+//     </li>
+//   `).join("");
+// }
+// REPLACE existing renderTracks() with this function
 function renderTracks() {
   if (!tracks.length) {
     els.trackList.innerHTML = `<li class="row"><div class="row-title">No downloaded tracks yet.</div></li>`;
     return;
   }
-  els.trackList.innerHTML = tracks.map((t, i) => `
-    <li class="row">
-      <div class="row-title">${t.title}</div>
-      <div class="track-actions">
-        <button class="btn small" onclick="playIndex(${i})">Play</button>
-        <button class="btn queue" onclick="queueTrack(${i})">Queue</button>
-        <button class="btn small danger" onclick="deleteTrack('${t.filename.replace(/'/g,"\\'")}')">❌</button>
-      </div>
-    </li>
-  `).join("");
+
+  els.trackList.innerHTML = tracks.map((t, i) => {
+    // Debug log: shows whether frontend received the thumbnail and the first 30 chars
+    console.log("Track:", t.title, "Thumb starts with:", t.thumbnail ? t.thumbnail.slice(0, 30) : "undefined");
+
+    // keep filename safe for inline handlers (same as before)
+    const safeFilename = (t.filename || "").replace(/'/g, "\\'");
+
+    // thumbnail HTML: show <img> if thumbnail present else a placeholder div
+    const thumbHTML = t.thumbnail
+      ? `<img class="track-thumb" src="${t.thumbnail}" alt="cover">`
+      : `<div class="track-thumb placeholder"></div>`;
+
+    return `
+      <li class="row">
+        <div class="row-title" style="display:flex;align-items:center;gap:8px;">
+          ${thumbHTML}
+          <div style="display:flex;flex-direction:column;">
+            <div class="title-text">${t.title}</div>
+            <div class="meta muted small">${t.filename || ""}</div>
+          </div>
+        </div>
+
+        <div class="track-actions">
+          <button class="btn small" onclick="playIndex(${i})">Play</button>
+          <button class="btn queue" onclick="queueTrack(${i})">Queue</button>
+          <button class="btn small danger" onclick="deleteTrack('${safeFilename}')">❌</button>
+        </div>
+      </li>
+    `;
+  }).join("");
 }
+
+
 
 async function deleteTrack(filename) {
   if (!active) return;
