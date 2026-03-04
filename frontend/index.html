@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <title>Musix</title>
@@ -7,6 +8,7 @@
   <link rel="stylesheet" href="style.css" />
   <link rel="icon" href="favicon.ico" />
 </head>
+
 <body>
   <nav class="navbar">
     <div class="nav-left">
@@ -20,12 +22,24 @@
 
     </div>
     <div class="nav-right">
-      <button id="undownloadedBtn" class="icon-btn" title="Undownloaded Songs">🚫<div class="small-label">Undownloaded-last-import</div></button>
+      <button id="undownloadedBtn" class="icon-btn" title="Undownloaded Songs">🚫<div class="small-label">
+          Undownloaded-last-import</div></button>
       <button id="searchBtn" class="icon-btn" title="Search Songs">🔍<div class="small-label">Search</div></button>
       <button id="importBtn" class="icon-btn" title="Import Playlist">📥<div class="small-label">Import</div></button>
+      <button id="shareBtn" class="icon-btn" title="Share via QR">📡<div class="small-label">Share</div></button>
+      <button id="queueBtn" class="icon-btn" title="View Queue">📋<div class="small-label">Queue</div></button>
     </div>
   </nav>
-
+  <!-- Universal Search Bar -->
+  <div class="universal-search-wrap">
+    <div class="universal-search-inner">
+      <span class="search-icon-inline">🔍</span>
+      <input id="universalSearchInput" class="universal-search-input" type="text" placeholder="Search your music..."
+        autocomplete="off" spellcheck="false" />
+      <button id="universalSearchClear" class="universal-search-clear hidden">✕</button>
+    </div>
+    <div id="universalSearchResults" class="universal-search-results hidden"></div>
+  </div>
   <main class="container">
     <section id="playlists" class="card">
       <h2>Your Playlists</h2>
@@ -84,61 +98,64 @@
     </div>
   </div>
 
-<!-- Import overlay -->
-<div id="importPage" class="overlay hidden">
-  <div class="overlay-box">
-    <div class="overlay-header">
-      <button id="backFromImport" class="close-btn">← Back</button>
-      <h2>Import</h2>
-    </div>
-
-    <!-- Tabs -->
-    <div class="import-tabs">
-      <button id="tabYoutube" class="active">YouTube</button>
-      <button id="tabSpotify">Spotify</button>
-    </div>
-
-    <!-- YouTube Import Section -->
-    <div id="youtubeImportSection">
-      <h3 style="text-align:center;">Import from YouTube</h3>
-      <div style="display:flex; justify-content:center; gap:10px; margin-bottom:15px;">
-        <input id="importUrl" type="text" placeholder="YouTube playlist or video URL" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="flex:1; max-width:400px;" />
-        <button id="importPreviewBtn" class="btn">Preview</button>
-      </div>
-      <!-- Results will be shown in the shared #importResults below -->
-    </div>
-
-    <!-- Spotify Import Section -->
-    <div id="spotifyImportSection" class="hidden">
-      <!-- Login -->
-      <div id="spotifyAuthSection" style="text-align:center; margin:20px 0;">
-        <button id="spotifyLoginBtn" class="btn large">Login with Spotify</button>
+  <!-- Import overlay -->
+  <div id="importPage" class="overlay hidden">
+    <div class="overlay-box">
+      <div class="overlay-header">
+        <button id="backFromImport" class="close-btn">← Back</button>
+        <h2>Import</h2>
       </div>
 
-      <!-- Private Playlists -->
-      <div id="spotifyPlaylistsSection" class="hidden">
-        <h3 style="text-align:center;">My Spotify Playlists</h3>
-        <div id="spotifyPlaylists" class="results"></div>
+      <!-- Tabs -->
+      <div class="import-tabs">
+        <button id="tabYoutube" class="active">YouTube</button>
+        <button id="tabSpotify">Spotify</button>
       </div>
 
-      <!-- Public Search -->
-      <div id="spotifyPublicSection">
-        <h3 style="text-align:center;">Search Public Playlists</h3>
+      <!-- YouTube Import Section -->
+      <div id="youtubeImportSection">
+        <h3 style="text-align:center;">Import from YouTube</h3>
         <div style="display:flex; justify-content:center; gap:10px; margin-bottom:15px;">
-          <input id="spotifySearchInput" type="text" placeholder="Search or paste Spotify playlist URL" style="flex:1; max-width:400px;" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
-          <button id="spotifySearchBtn" class="btn">Search</button>
+          <input id="importUrl" type="text" placeholder="YouTube playlist or video URL" autocomplete="off"
+            autocorrect="off" autocapitalize="off" spellcheck="false" style="flex:1; max-width:400px;" />
+          <button id="importPreviewBtn" class="btn">Preview</button>
         </div>
-        <div id="spotifySearchResults" class="results"></div>
+        <!-- Results will be shown in the shared #importResults below -->
       </div>
-    </div>
 
-    <!-- Shared Import Results -->
-    <div id="importResults" class="results"></div>
-    <div style="padding:12px;text-align:right;">
-      <button id="importDownloadSelected" class="btn">Download Selected</button>
+      <!-- Spotify Import Section -->
+      <div id="spotifyImportSection" class="hidden">
+        <!-- Login -->
+        <div id="spotifyAuthSection" style="text-align:center; margin:20px 0;">
+          <button id="spotifyLoginBtn" class="btn large">Login with Spotify</button>
+        </div>
+
+        <!-- Private Playlists -->
+        <div id="spotifyPlaylistsSection" class="hidden">
+          <h3 style="text-align:center;">My Spotify Playlists</h3>
+          <div id="spotifyPlaylists" class="results"></div>
+        </div>
+
+        <!-- Public Search -->
+        <div id="spotifyPublicSection">
+          <h3 style="text-align:center;">Search Public Playlists</h3>
+          <div style="display:flex; justify-content:center; gap:10px; margin-bottom:15px;">
+            <input id="spotifySearchInput" type="text" placeholder="Search or paste Spotify playlist URL"
+              style="flex:1; max-width:400px;" autocomplete="off" autocorrect="off" autocapitalize="off"
+              spellcheck="false" />
+            <button id="spotifySearchBtn" class="btn">Search</button>
+          </div>
+          <div id="spotifySearchResults" class="results"></div>
+        </div>
+      </div>
+
+      <!-- Shared Import Results -->
+      <div id="importResults" class="results"></div>
+      <div style="padding:12px;text-align:right;">
+        <button id="importDownloadSelected" class="btn">Download Selected</button>
+      </div>
     </div>
   </div>
-</div>
 
 
 
@@ -164,30 +181,79 @@
     </div>
   </div>
 
-  <!-- Persistent Music Bar -->
-  <div id="musicBar" class="music-bar">
-    <button id="bottomPrevBtn" class="music-btn">⏮</button>
-    <button id="bottomPlayBtn" class="music-btn">▶</button>
-    <button id="bottomNextBtn" class="music-btn">⏭</button>
-    <button id="bottomLoopBtn" class="music-btn">🔁</button>
-    <button id="bottomShuffleBtn" class="music-btn">🔀</button>
-    <div id="bottomSongName" class="music-song-name">Not playing</div>
-    <div class="music-progress-outer">
-      <div id="musicProgressBar" class="music-progress-inner"></div>
+  <!-- Share / QR Transfer overlay -->
+  <div id="sharePage" class="overlay hidden">
+    <div class="overlay-box" style="max-width:860px;">
+      <div class="overlay-header">
+        <button id="backFromShare" class="close-btn">← Back</button>
+        <h2 style="color:#fff; margin:0;">📡 Share via QR</h2>
+        <span style="color:var(--muted); font-size:0.85rem; margin-left:auto;">
+          Scan with Musix Android app
+        </span>
+      </div>
+      <div id="sharePlaylistList" class="results" style="max-height:65vh; overflow-y:auto;"></div>
     </div>
   </div>
-    <!-- Profile chooser overlay (shows at startup) -->
+  <!-- Queue Preview overlay -->
+  <div id="queuePage" class="overlay hidden">
+    <div class="overlay-box" style="max-width:600px;">
+      <div class="overlay-header">
+        <button id="backFromQueue" class="close-btn">← Back</button>
+        <h2 style="color:#fff; margin:0;">📋 Queue</h2>
+        <button id="clearQueueBtn" class="btn small danger" style="margin-left:auto;">Clear Queue</button>
+      </div>
+      <div id="queueList" class="results" style="max-height:65vh; overflow-y:auto;"></div>
+    </div>
+  </div>
+
+  <!-- Lyrics Panel (slides up above music bar) -->
+  <div id="lyricsPanel" class="lyrics-panel hidden">
+    <div class="lyrics-panel-header">
+      <span class="lyrics-panel-title">🎤 Lyrics</span>
+      <button id="closeLyricsBtn" class="close-btn">✕</button>
+    </div>
+    <div id="lyricsContent" class="lyrics-content">No lyrics available.</div>
+  </div>
+
+  <!-- Persistent Music Bar -->
+  <div id="musicBar" class="music-bar">
+    <img id="musicBarAlbumArt" class="music-bar-art" src="" alt="" />
+    <div class="music-bar-main">
+      <div class="music-bar-row1">
+        <div id="bottomSongName" class="music-song-name">Not playing</div>
+        <div class="music-bar-controls">
+          <button id="bottomPrevBtn" class="music-btn">⏮</button>
+          <button id="bottomPlayBtn" class="music-btn">▶</button>
+          <button id="bottomNextBtn" class="music-btn">⏭</button>
+          <button id="bottomLoopBtn" class="music-btn">🔁</button>
+          <button id="bottomShuffleBtn" class="music-btn">🔀</button>
+          <button id="lyricsBtn" class="music-btn" title="Lyrics">🎤</button>
+        </div>
+      </div>
+      <div class="music-bar-row2">
+        <span id="currentTime" class="music-time">0:00</span>
+        <div class="music-progress-outer">
+          <div id="musicProgressBar" class="music-progress-inner"></div>
+        </div>
+        <span id="totalTime" class="music-time">0:00</span>
+      </div>
+    </div>
+  </div>
+  <!-- Profile chooser overlay (shows at startup) -->
   <div id="profilePage" class="overlay hidden">
     <div class="overlay-box" style="max-width:620px; text-align:center;">
       <div class="overlay-header" style="justify-content:center;">
         <h2 style="margin:0; color:#fff;">Continue as</h2>
       </div>
 
-      <div id="profilesList" class="profile-list" style="display:flex; flex-wrap:wrap; gap:10px; justify-content:center; padding:12px 6px;"></div>
+      <div id="profilesList" class="profile-list"
+        style="display:flex; flex-wrap:wrap; gap:10px; justify-content:center; padding:12px 6px;"></div>
 
       <div style="padding:14px; margin-top:8px;">
-        <input id="newProfileName" placeholder="New profile name" style="width:60%; padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,0.04); background:transparent; color:#e6e6ef;" />
-        <label style="display:inline-flex; align-items:center; gap:8px; margin-left:8px; color:var(--muted); font-size:0.9rem;">
+        <input id="newProfileName" placeholder="New profile name"
+          style="width:60%; padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,0.04); background:transparent; color:#e6e6ef;" />
+        <label
+          style="display:inline-flex; align-items:center; gap:8px; margin-left:8px; color:var(--muted); font-size:0.9rem;">
           <input id="stayLoggedIn" type="checkbox" /> stay logged in
         </label>
         <div style="margin-top:12px;">
@@ -220,7 +286,5 @@
 
   <script src="app.js"></script>
 </body>
+
 </html>
-
-
-

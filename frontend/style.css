@@ -432,3 +432,294 @@ button.btn:hover { opacity:0.98; transform:translateY(-1px); transition: all 120
 .row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 12px; }
 .row-title .title-text { font-weight:500; }
 .meta.small { font-size:12px; color:var(--muted); margin-top:2px; }
+/* ── Share / QR Transfer overlay ── */
+.share-playlist-row {
+  background: var(--glass);
+  border: 1px solid rgba(255,255,255,0.03);
+  border-radius: 10px;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+
+.share-playlist-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+}
+
+.share-expand-btn {
+  flex: 1;
+  text-align: left;
+  background: transparent !important;
+  border: 1px solid rgba(255,255,255,0.04) !important;
+  color: #fff !important;
+  font-weight: 700;
+  box-shadow: none !important;
+}
+
+.share-playlist-qr-btn {
+  flex-shrink: 0;
+}
+
+.share-songs-list {
+  border-top: 1px solid rgba(255,255,255,0.03);
+  padding: 6px 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.share-song-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.01);
+}
+
+.share-song-name {
+  flex: 1;
+  font-size: 0.92rem;
+  color: #e6e6ef;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.share-qr-popup {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0 4px;
+}
+
+.share-qr-img {
+  width: 200px;
+  height: 200px;
+  border-radius: 8px;
+  border: 2px solid rgba(255,255,255,0.06);
+  image-rendering: pixelated;
+}
+
+.share-qr-url {
+  font-size: 0.72rem;
+  color: var(--muted);
+  word-break: break-all;
+  text-align: center;
+  max-width: 340px;
+}
+/* ── Universal Search Bar ── */
+.universal-search-wrap {
+  position: relative;
+  width: 100%;
+  background: linear-gradient(180deg, rgba(255,255,255,0.015), rgba(255,255,255,0.008));
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  padding: 10px 20px;
+  z-index: 100;
+}
+
+.universal-search-inner {
+  display: flex;
+  align-items: center;
+  max-width: 680px;
+  margin: 0 auto;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 10px;
+  padding: 8px 14px;
+  gap: 10px;
+}
+
+.search-icon-inline {
+  font-size: 0.95rem;
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+.universal-search-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #e6e6ef;
+  font-size: 0.95rem;
+}
+
+.universal-search-input::placeholder { color: var(--muted); }
+
+.universal-search-clear {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.universal-search-clear:hover { color: #fff; }
+
+.universal-search-results {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 40px);
+  max-width: 680px;
+  max-height: 400px;
+  overflow-y: auto;
+  background: #0f0b16;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 0 0 10px 10px;
+  z-index: 999;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.6);
+}
+
+.usearch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  cursor: default;
+}
+.usearch-row:hover { background: rgba(255,255,255,0.02); }
+.usearch-row:last-child { border-bottom: none; }
+
+.usearch-info { flex: 1; min-width: 0; }
+.usearch-title { color: #e6e6ef; font-weight: 500; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.usearch-meta { color: var(--muted); font-size: 0.78rem; margin-top: 2px; }
+.usearch-playlist { color: var(--accent); }
+
+.usearch-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+.usearch-empty {
+  padding: 16px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+/* ── Music Bar Redesign ── */
+.music-bar {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  background: #181818;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  height: 80px;
+  z-index: 9999;
+  box-shadow: 0 -2px 16px rgba(0,0,0,0.18);
+  gap: 12px;
+}
+
+.music-bar-art {
+  width: 52px;
+  height: 52px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
+  display: none;
+  background: #333;
+}
+
+.music-bar-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.music-bar-row1 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.music-bar-row2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.music-bar-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.music-time {
+  font-size: 0.72rem;
+  color: var(--muted);
+  min-width: 32px;
+  flex-shrink: 0;
+}
+
+.music-progress-outer {
+  flex: 1;
+  height: 4px;
+  background: #404040;
+  border-radius: 4px;
+  position: relative;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.music-progress-inner {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #1db954 0%, #7c3aed 100%);
+  border-radius: 4px;
+  transition: width 0.2s linear;
+}
+
+/* ── Lyrics Panel ── */
+.lyrics-panel {
+  position: fixed;
+  left: 0; right: 0;
+  bottom: 80px;
+  max-height: 40vh;
+  background: #0f0b16;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  z-index: 9998;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 -4px 24px rgba(0,0,0,0.4);
+}
+
+.lyrics-panel.hidden { display: none; }
+
+.lyrics-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  flex-shrink: 0;
+}
+
+.lyrics-panel-title {
+  font-weight: 700;
+  color: #fff;
+  font-size: 0.95rem;
+}
+
+.lyrics-content {
+  padding: 16px;
+  overflow-y: auto;
+  flex: 1;
+  color: #e6e6ef;
+  font-size: 0.95rem;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  text-align: center;
+}

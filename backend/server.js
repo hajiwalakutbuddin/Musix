@@ -33,37 +33,27 @@ const PORT = process.env.PORT || 5000;
 // Session: required for Spotify login flow (state + tokens)
 // Use a proper SESSION_SECRET in production via .env
 const SESSION_SECRET = process.env.SESSION_SECRET || "musix_dev_secret_change_me";
-// app.use(session({
-//   secret: SESSION_SECRET,
-//   resave: false,
-//   saveUninitialized: false,
-//   cookie: { secure: false } // secure:true only for HTTPS production
+
+// app.use(cors({
+//   origin: "http://localhost:5000",  // or your frontend origin
+//   credentials: true
 // }));
-// app.use(cors());
 app.use(cors({
-  origin: "http://localhost:5000",  // or your frontend origin
+  origin: function(origin, callback) {
+    callback(null, true); // allow all origins
+  },
   credentials: true
 }));
 
-// app.use(session({
-//   secret: process.env.SESSION_SECRET || "supersecret",
-//   resave: false,
-//   saveUninitialized: false,
-//   cookie: {
-//     httpOnly: true,
-//     secure: false,       // ✅ must be false on localhost:5000 (no HTTPS)
-//     sameSite: "lax",     // ✅ Spotify redirect will work with "lax"
-//     maxAge: 1000 * 60 * 60 // 1 hour
-//   }
-// }));
+app.set("trust proxy", 1);
 app.use(session({
-  name: "musix.sid",  // give your cookie a unique name
+  name: "musix.sid",
   secret: SESSION_SECRET,
-  resave: false,
-  saveUninitialized: false,   // don’t save empty sessions
+  resave: true,
+  saveUninitialized: true,
   cookie: {
     httpOnly: true,
-    secure: false,   // true only if HTTPS
+    secure: false,
     sameSite: "lax",
     maxAge: 1000 * 60 * 60 // 1 hour
   }
@@ -217,6 +207,10 @@ app.use("/api/music", musicRoutes);
 // Spotify routes (new)
 const spotifyRoutes = require("./routes/spotify");
 app.use("/api/spotify", spotifyRoutes);
+
+// Transfer routes (new)
+const transferRoutes = require("./routes/transfer");
+app.use("/api/transfer", transferRoutes);
 
 // Serve static frontend files (index.html, assets, etc)
 app.use(express.static(FRONTEND_DIR));

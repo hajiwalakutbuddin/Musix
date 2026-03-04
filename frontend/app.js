@@ -86,7 +86,20 @@ els.editProfileBtn = document.getElementById("editProfileBtn");
 els.uploadPicBtn = document.getElementById("uploadPicBtn");
 els.logoutBtn = document.getElementById("logoutBtn");
 els.deleteProfileBtn = document.getElementById("deleteProfileBtn");
-
+els.shareBtn = document.getElementById("shareBtn");
+els.sharePage = document.getElementById("sharePage");
+els.queueBtn = document.getElementById("queueBtn");
+els.queuePage = document.getElementById("queuePage");
+els.universalSearchInput = document.getElementById("universalSearchInput");
+els.universalSearchResults = document.getElementById("universalSearchResults");
+els.universalSearchClear = document.getElementById("universalSearchClear");
+els.lyricsBtn = document.getElementById("lyricsBtn");
+els.lyricsPanel = document.getElementById("lyricsPanel");
+els.lyricsContent = document.getElementById("lyricsContent");
+els.closeLyricsBtn = document.getElementById("closeLyricsBtn");
+els.musicBarAlbumArt = document.getElementById("musicBarAlbumArt");
+els.currentTime = document.getElementById("currentTime");
+els.totalTime = document.getElementById("totalTime");
 
 // ----------- Profiles (server-backed) ----------
 let profiles = [];
@@ -175,7 +188,7 @@ function selectProfile(id) {
   }
 
   // Persist selection
-  try { localStorage.setItem("musix_activeProfile", activeProfile.id); } catch (e) {}
+  try { localStorage.setItem("musix_activeProfile", activeProfile.id); } catch (e) { }
 
   // Close chooser and load profile-scoped data
   closeProfileChooser();
@@ -243,7 +256,7 @@ async function setActive(name) {
 function renderPlaylists() {
   els.playlistList.innerHTML = playlists.map(n => `
     <li>
-      <div class="pl-item-title" onclick="setActive('${n.replace(/'/g,"\\'")}')">${n}</div>
+      <div class="pl-item-title" onclick="setActive('${n.replace(/'/g, "\\'")}')">${n}</div>
     </li>
   `).join("");
 }
@@ -277,7 +290,7 @@ async function loadPlaylistTracks(name) {
   try {
     const data = await fetchJSON(`${API}/playlist/${encodeURIComponent(activeProfile.id)}/${encodeURIComponent(name)}`);
     tracks = data.songs || [];
-    queue = [];
+    console.log(tracks[0]);
     currentIndex = -1;
     renderTracks();
   } catch (e) {
@@ -287,23 +300,6 @@ async function loadPlaylistTracks(name) {
   }
 }
 
-// function renderTracks() {
-//   if (!tracks.length) {
-//     els.trackList.innerHTML = `<li class="row"><div class="row-title">No downloaded tracks yet.</div></li>`;
-//     return;
-//   }
-//   els.trackList.innerHTML = tracks.map((t, i) => `
-//     <li class="row">
-//       <div class="row-title">${t.title}</div>
-//       <div class="track-actions">
-//         <button class="btn small" onclick="playIndex(${i})">Play</button>
-//         <button class="btn queue" onclick="queueTrack(${i})">Queue</button>
-//         <button class="btn small danger" onclick="deleteTrack('${t.filename.replace(/'/g,"\\'")}')">❌</button>
-//       </div>
-//     </li>
-//   `).join("");
-// }
-// REPLACE existing renderTracks() with this function
 function renderTracks() {
   if (!tracks.length) {
     els.trackList.innerHTML = `<li class="row"><div class="row-title">No downloaded tracks yet.</div></li>`;
@@ -357,23 +353,67 @@ async function deleteTrack(filename) {
 }
 
 // ----------- Player & controls ------------
-function setNowPlayingText(title) {
+function setNowPlayingText(title, thumbnail) {
   els.nowPlaying.textContent = "Now playing: " + title;
   if (els.bottomSongName) els.bottomSongName.textContent = title;
+  // update album art in music bar
+  if (els.musicBarAlbumArt) {
+    if (thumbnail) {
+      els.musicBarAlbumArt.src = thumbnail;
+      els.musicBarAlbumArt.style.display = "block";
+    } else {
+      els.musicBarAlbumArt.src = "";
+      els.musicBarAlbumArt.style.display = "none";
+    }
+  }
 }
 
-function playFile(url, title) {
+let currentFilePath = null;
+
+function playFile(url, title, thumbnail, filePath) {
   if (!url) return;
   els.player.src = url;
-  els.player.play().catch(() => {});
-  setNowPlayingText(title, "Now playing");
+  els.player.play().catch(() => { });
+  setNowPlayingText(title, thumbnail);
+  currentFilePath = filePath || null;
+  // auto-hide lyrics panel when new song starts
+  if (els.lyricsPanel) els.lyricsPanel.classList.add("hidden");
+}
+
+// ----------- Lyrics ------------
+async function toggleLyrics() {
+  if (!els.lyricsPanel) return;
+
+  // if already open, close it
+  if (!els.lyricsPanel.classList.contains("hidden")) {
+    els.lyricsPanel.classList.add("hidden");
+    return;
+  }
+
+  if (!currentFilePath) {
+    els.lyricsContent.textContent = "No song is currently playing.";
+    els.lyricsPanel.classList.remove("hidden");
+    return;
+  }
+
+  els.lyricsContent.textContent = "Loading lyrics...";
+  els.lyricsPanel.classList.remove("hidden");
+
+  try {
+    const data = await fetchJSON(
+      `${API}/lyrics?filePath=${encodeURIComponent(currentFilePath)}`
+    );
+    els.lyricsContent.textContent = data.lyrics || "No lyrics available for this song.";
+  } catch (e) {
+    els.lyricsContent.textContent = "Failed to load lyrics.";
+  }
 }
 
 function playIndex(i) {
   if (!tracks.length || i < 0 || i >= tracks.length) return;
   currentIndex = i;
   const s = tracks[i];
-  playFile(s.fileUrl, s.title);
+  playFile(s.fileUrl, s.title, s.thumbnail, s.filePath);
 }
 
 function prev() {
@@ -424,7 +464,7 @@ function toggleShuffle() {
 }
 function togglePlayPause() {
   if (els.player.paused) {
-    els.player.play().catch(()=>{});
+    els.player.play().catch(() => { });
     els.bottomPlayBtn.textContent = "⏸";
   } else {
     els.player.pause();
@@ -434,9 +474,11 @@ function togglePlayPause() {
 
 function playAllTracks() {
   if (!tracks.length) return;
+  queue = [];
   currentIndex = 0;
   playIndex(0);
 }
+
 function queueTrack(index) {
   if (!tracks[index]) return;
   queue.push({ fileUrl: tracks[index].fileUrl, title: tracks[index].title });
@@ -457,7 +499,23 @@ function updateNowPlayingProgress() {
     const pct = d ? Math.min(100, Math.max(0, (t / d) * 100)) : 0;
     if (els.nowPlayingProgress) els.nowPlayingProgress.style.width = `${pct}%`;
     if (els.musicProgressBar) els.musicProgressBar.style.width = `${pct}%`;
-  } catch (e) {}
+  } catch (e) { }
+}
+function formatTime(seconds) {
+  if (!seconds || isNaN(seconds)) return "0:00";
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+function updateTimeDisplay() {
+  if (els.currentTime) els.currentTime.textContent = formatTime(els.player.currentTime);
+  if (els.totalTime) els.totalTime.textContent = formatTime(els.player.duration);
+}
+
+if (els.player) {
+  els.player.addEventListener("timeupdate", updateTimeDisplay);
+  els.player.addEventListener("loadedmetadata", updateTimeDisplay);
 }
 if (els.player) {
   els.player.addEventListener("timeupdate", updateNowPlayingProgress);
@@ -478,7 +536,7 @@ if (els.nowPlayingBar) {
 // ----------- Downloads pane ------------
 async function loadDownloads() {
   try {
-    const data = await fetchJSON(`${API}/downloads?profileId=${encodeURIComponent(activeProfile?.id||'')}`);
+    const data = await fetchJSON(`${API}/downloads?profileId=${encodeURIComponent(activeProfile?.id || '')}`);
     const base = (window.location.origin || "http://localhost:5000");
     let html = "<p>No downloads yet.</p>";
     if (data && Object.keys(data.downloads || {}).length) {
@@ -486,8 +544,8 @@ async function loadDownloads() {
         .map(([pl, files]) => {
           const displayName = pl;
           return `<div class="dl-group"><h3>${displayName}</h3><ul>${files.map(f => {
-            const url = f.fileUrl ? (base + f.fileUrl) : `${base}/downloads/${encodeURIComponent(activeProfile?.id||'')}/playlists/${encodeURIComponent(pl)}/${encodeURIComponent(f.filename)}`;
-            return `<li><button class="link-btn" onclick="playFile('${url}','${(f.filename||"").replace(/'/g,"\\'")}')">${f.filename || f}</button></li>`;
+            const url = f.fileUrl ? (base + f.fileUrl) : `${base}/downloads/${encodeURIComponent(activeProfile?.id || '')}/playlists/${encodeURIComponent(pl)}/${encodeURIComponent(f.filename)}`;
+            return `<li><button class="link-btn" onclick="playFile('${url}','${(f.filename || "").replace(/'/g, "\\'")}')">${f.filename || f}</button></li>`;
           }).join("")}</ul></div>`;
         });
       if (groups.length) html = groups.join("");
@@ -501,7 +559,7 @@ async function loadDownloads() {
 
 // ----------- Search & Import ------------
 function openSearch() { show(els.searchPage); }
-function closeSearch() { hide(els.searchPage); els.searchResults.innerHTML=""; if (els.searchQuery) els.searchQuery.value=""; }
+function closeSearch() { hide(els.searchPage); els.searchResults.innerHTML = ""; if (els.searchQuery) els.searchQuery.value = ""; }
 
 async function doSearch() {
   const q = els.searchQuery.value.trim();
@@ -527,8 +585,8 @@ async function downloadSongFromSearch(videoId) {
   if (!active) return alert("Select a playlist first from the left sidebar.");
   try {
     const { jobId } = await fetchJSON(`${API}/download/song`, {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ profileId: activeProfile?.id, playlist: active, videoId })
     });
     await trackJob(jobId);
@@ -542,7 +600,7 @@ async function downloadSongFromSearch(videoId) {
 
 // Import preview & download
 function openImport() { show(els.importPage); }
-function closeImport() { hide(els.importPage); els.importResults.innerHTML=""; if (els.importUrl) els.importUrl.value=""; }
+function closeImport() { hide(els.importPage); els.importResults.innerHTML = ""; if (els.importUrl) els.importUrl.value = ""; }
 
 let importPreview = [];
 
@@ -551,8 +609,8 @@ async function importPreviewFetch() {
   if (!url) return;
   try {
     const data = await fetchJSON(`${API}/import/preview`, {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url })
     });
     importPreview = data.results || [];
@@ -575,7 +633,7 @@ async function importPreviewFetch() {
 }
 
 // Select Spotify playlist & render checkboxes (single consolidated implementation)
-window.selectSpotifyPlaylist = async function(id, name) {
+window.selectSpotifyPlaylist = async function (id, name) {
   try {
     spotifyCurrentPlaylistId = id;
     spotifyCurrentPlaylistName = name;
@@ -586,7 +644,7 @@ window.selectSpotifyPlaylist = async function(id, name) {
 
     spotifyTracks = items.map(it => {
       const t = it.track || it; // defensive
-      const title = `${t.name} — ${(t.artists||[]).map(a => a.name).join(", ")}`;
+      const title = `${t.name} — ${(t.artists || []).map(a => a.name).join(", ")}`;
       return { id: t.id, title };
     });
 
@@ -804,7 +862,7 @@ function setProgress(pct, text) {
   try {
     if (els.progressBar) els.progressBar.style.width = `${Math.max(0, Math.min(100, pct || 0))}%`;
     if (els.progressText && text !== undefined) els.progressText.textContent = text;
-  } catch (e) {}
+  } catch (e) { }
 }
 
 async function trackJob(jobId) {
@@ -865,7 +923,7 @@ function setUndownloaded(list) {
 //     <div class="undl-row" id="undl-row-${idx}">
 //       <div class="undl-title">${s.title || s.id}</div>
 //       <button class="btn small" onclick="toggleUndlSearch(${idx})">Search</button>
-    
+
 //       <div class="undl-search-panel hidden" id="undl-search-panel-${idx}">
 //         <input type="text" id="undl-search-input-${idx}" value="${s.title || s.id}" />
 //         <button class="btn small" onclick="searchUndlSong(${idx}, true)">Go</button>
@@ -899,18 +957,18 @@ function renderUndownloaded() {
 }
 
 
-window.toggleUndlSearch = function(idx) {
+window.toggleUndlSearch = function (idx) {
   const panel = document.getElementById(`undl-search-panel-${idx}`);
   if (!panel) return;
   panel.classList.toggle("hidden");
 };
 
-window.searchUndlSong = async function(idx, manual = false) {
+window.searchUndlSong = async function (idx, manual = false) {
   const song = lastUndownloaded[idx];
   const resultsDiv = document.getElementById(`undl-search-results-${idx}`);
   const input = document.getElementById(`undl-search-input-${idx}`);
   if (!song || !resultsDiv) return;
-  
+
   let query = song.title || song.id;
   if (manual && input) query = input.value.trim() || query;
 
@@ -932,14 +990,14 @@ window.searchUndlSong = async function(idx, manual = false) {
   }
 };
 
-window.downloadUndlSong = async function(videoId, idx) {
+window.downloadUndlSong = async function (videoId, idx) {
   if (!active) return alert("Select a playlist first from the left sidebar.");
   try {
-      const { jobId } = await fetchJSON(`${API}/download/song`, {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({ profileId: activeProfile?.id, playlist: active, videoId })
-      });
+    const { jobId } = await fetchJSON(`${API}/download/song`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ profileId: activeProfile?.id, playlist: active, videoId })
+    });
 
     await trackJob(jobId);
     await loadPlaylistTracks(active);
@@ -965,7 +1023,300 @@ async function repairActive() {
     alert("Repair failed: " + (e.message || e));
   }
 }
+// ----------- Share / QR Transfer ------------
+const API_TRANSFER = (window.location.origin || "http://localhost:5000") + "/api/transfer";
 
+function openShare() {
+  if (!activeProfile) return alert("Select a profile first.");
+  show(els.sharePage);
+  loadShareTracks();
+}
+
+function closeShare() {
+  hide(els.sharePage);
+  const container = document.getElementById("sharePlaylistList");
+  if (container) container.innerHTML = "";
+}
+
+// ----------- Queue Preview ------------
+function openQueue() {
+  renderQueueOverlay();
+  show(els.queuePage);
+}
+
+function closeQueue() {
+  hide(els.queuePage);
+}
+
+function renderQueueOverlay() {
+  const container = document.getElementById("queueList");
+  if (!container) return;
+
+  if (!queue.length) {
+    container.innerHTML = `<p style="color:var(--muted); padding:12px;">Queue is empty.</p>`;
+    return;
+  }
+
+  container.innerHTML = queue.map((item, i) => `
+    <div class="share-song-row">
+      <span style="color:var(--muted); font-size:0.85rem; min-width:24px;">${i + 1}</span>
+      <span class="share-song-name">${item.title || item.fileUrl}</span>
+    </div>
+  `).join("");
+}
+
+function clearQueue() {
+  queue = [];
+  renderQueueOverlay();
+}
+// ----------- Universal Search ------------
+let searchDebounceTimer = null;
+
+function initUniversalSearch() {
+  if (!els.universalSearchInput) return;
+
+  els.universalSearchInput.addEventListener("input", () => {
+    const q = els.universalSearchInput.value.trim();
+
+    // show/hide clear button
+    if (els.universalSearchClear) {
+      els.universalSearchClear.classList.toggle("hidden", !q);
+    }
+
+    clearTimeout(searchDebounceTimer);
+    if (!q) {
+      hideUniversalResults();
+      return;
+    }
+    searchDebounceTimer = setTimeout(() => doUniversalSearch(q), 300);
+  });
+
+  els.universalSearchInput.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") clearUniversalSearch();
+  });
+
+  if (els.universalSearchClear) {
+    els.universalSearchClear.addEventListener("click", clearUniversalSearch);
+  }
+
+  // close results when clicking outside
+  document.addEventListener("click", (e) => {
+    const wrap = document.querySelector(".universal-search-wrap");
+    if (wrap && !wrap.contains(e.target)) hideUniversalResults();
+  });
+}
+
+async function doUniversalSearch(q) {
+  if (!activeProfile) return;
+  try {
+    const data = await fetchJSON(
+      `${API}/search/local?profileId=${encodeURIComponent(activeProfile.id)}&q=${encodeURIComponent(q)}`
+    );
+    renderUniversalResults(data.results || []);
+  } catch (e) {
+    console.warn("Local search failed:", e);
+  }
+}
+
+function renderUniversalResults(results) {
+  const container = els.universalSearchResults;
+  if (!container) return;
+
+  if (!results.length) {
+    container.innerHTML = `<div class="usearch-empty">No results found</div>`;
+    container.classList.remove("hidden");
+    return;
+  }
+
+  container.innerHTML = results.map((r, i) => `
+    <div class="usearch-row" data-index="${i}">
+      <div class="usearch-info">
+        <div class="usearch-title">${r.title || r.filename}</div>
+        <div class="usearch-meta">
+          ${r.artist ? `<span>${r.artist}</span> · ` : ""}
+          <span class="usearch-playlist">📂 ${r.playlist}</span>
+        </div>
+      </div>
+      <div class="usearch-actions">
+        <button class="btn small usearch-play-btn" data-index="${i}">▶ Play</button>
+        <button class="btn small usearch-queue-btn" data-index="${i}">+ Queue</button>
+      </div>
+    </div>
+  `).join("");
+
+  // store results for button handlers
+  container._results = results;
+
+  container.querySelectorAll(".usearch-play-btn").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const r = container._results[btn.dataset.index];
+      playFile(r.fileUrl, r.title || r.filename);
+      clearUniversalSearch();
+    });
+  });
+
+  container.querySelectorAll(".usearch-queue-btn").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const r = container._results[btn.dataset.index];
+      queue.push({ fileUrl: r.fileUrl, title: r.title || r.filename });
+      showNotification(`Queued: ${r.title || r.filename}`);
+      // brief visual feedback on button
+      btn.textContent = "✓";
+      setTimeout(() => btn.textContent = "+ Queue", 1000);
+    });
+  });
+
+  container.classList.remove("hidden");
+}
+
+function hideUniversalResults() {
+  if (els.universalSearchResults) els.universalSearchResults.classList.add("hidden");
+}
+
+function clearUniversalSearch() {
+  if (els.universalSearchInput) els.universalSearchInput.value = "";
+  if (els.universalSearchClear) els.universalSearchClear.classList.add("hidden");
+  hideUniversalResults();
+}
+
+function showNotification(msg) {
+  // simple toast — reuse progress text briefly
+  if (els.progressText) {
+    els.progressText.textContent = msg;
+    show(els.progressOverlay);
+    setTimeout(() => hide(els.progressOverlay), 1500);
+  }
+}
+async function loadShareTracks() {
+  const container = document.getElementById("sharePlaylistList");
+  if (!container) return;
+  container.innerHTML = `<p style="color:var(--muted); padding:12px;">Loading playlists…</p>`;
+
+  try {
+    const data = await fetchJSON(
+      `${API_TRANSFER}/tracks?profileId=${encodeURIComponent(activeProfile.id)}`
+    );
+    const playlists = data.playlists || {};
+    const names = Object.keys(playlists);
+
+    if (!names.length) {
+      container.innerHTML = `<p style="color:var(--muted); padding:12px;">No playlists found for this profile.</p>`;
+      return;
+    }
+
+    container.innerHTML = names.map(name => {
+      const songs = playlists[name] || [];
+      const songRows = songs.map((song, si) => `
+        <div class="share-song-row">
+          <span class="share-song-name">${song.title || song.name}</span>
+          <button
+            class="btn small share-song-qr-btn"
+            data-song='${JSON.stringify({
+        url: song.url,
+        title: song.title || "",
+        artist: song.artist || "",
+        album: song.album || "",
+        duration: song.duration || 0,
+        coverUrl: song.coverUrl || null
+      }).replace(/'/g, "&#39;")}'
+          >🔲 QR</button>
+          <div class="share-qr-popup hidden"></div>
+        </div>
+      `).join("");
+
+      return `
+        <div class="share-playlist-row">
+          <div class="share-playlist-header">
+            <button class="share-expand-btn btn small" data-name="${name.replace(/"/g, '&quot;')}">▶ ${name} (${songs.length})</button>
+            <button class="share-playlist-qr-btn btn small"
+              data-name="${name.replace(/"/g, '&quot;')}"
+              data-songs='${JSON.stringify(songs).replace(/'/g, "&#39;")}'>
+              🔲 Playlist QR
+            </button>
+          </div>
+          <div class="share-qr-popup hidden" id="share-pl-qr-${name.replace(/\s/g, '_')}"></div>
+          <div class="share-songs-list hidden">${songRows}</div>
+        </div>
+      `;
+    }).join("");
+
+    // ── Expand/collapse toggle ──
+    container.querySelectorAll(".share-expand-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const row = btn.closest(".share-playlist-row");
+        const songs = row.querySelector(".share-songs-list");
+        const open = !songs.classList.contains("hidden");
+        songs.classList.toggle("hidden", open);
+        btn.textContent = (open ? "▶ " : "▼ ") + btn.dataset.name + ` (${row.querySelectorAll(".share-song-row").length})`;
+      });
+    });
+
+    // ── Per-song QR ──
+    container.querySelectorAll(".share-song-qr-btn").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const popup = btn.nextElementSibling; // .share-qr-popup
+        if (!popup.classList.contains("hidden")) {
+          popup.classList.add("hidden");
+          popup.innerHTML = "";
+          btn.textContent = "🔲 QR";
+          return;
+        }
+        btn.textContent = "⏳";
+        try {
+          const songData = JSON.parse(btn.dataset.song.replace(/&#39;/g, "'"));
+          const encoded = encodeURIComponent(JSON.stringify(songData));
+          popup.innerHTML = `<img src="${API_TRANSFER}/qr?data=${encoded}" alt="QR" class="share-qr-img" />
+                             <div class="share-qr-url">${songData.url}</div>`;
+          popup.classList.remove("hidden");
+          btn.textContent = "✖ Close";
+        } catch (e) {
+          btn.textContent = "🔲 QR";
+          alert("Failed to generate QR: " + e.message);
+        }
+      });
+    });
+
+    // ── Playlist QR (register then QR the short URL) ──
+    container.querySelectorAll(".share-playlist-qr-btn").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const plName = btn.dataset.name;
+        const popupId = `share-pl-qr-${plName.replace(/\s/g, '_')}`;
+        const popup = document.getElementById(popupId);
+        if (!popup) return;
+
+        if (!popup.classList.contains("hidden")) {
+          popup.classList.add("hidden");
+          popup.innerHTML = "";
+          btn.textContent = "🔲 Playlist QR";
+          return;
+        }
+
+        btn.textContent = "⏳";
+        try {
+          const songs = JSON.parse(btn.dataset.songs.replace(/&#39;/g, "'"));
+          const reg = await fetchJSON(`${API_TRANSFER}/register-playlist`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: plName, songs })
+          });
+          const encoded = encodeURIComponent(reg.url);
+          popup.innerHTML = `<img src="${API_TRANSFER}/qr?data=${encoded}" alt="Playlist QR" class="share-qr-img" />
+                             <div class="share-qr-url">${reg.url}</div>`;
+          popup.classList.remove("hidden");
+          btn.textContent = "✖ Close";
+        } catch (e) {
+          btn.textContent = "🔲 Playlist QR";
+          alert("Failed to generate playlist QR: " + e.message);
+        }
+      });
+    });
+
+  } catch (e) {
+    container.innerHTML = `<p style="color:#ff7b7b; padding:12px;">Error loading playlists: ${e.message}</p>`;
+  }
+}
 // ----------- Utility: safeAssign ------------
 function safeAssign(el, fn) { if (el) el.onclick = fn; }
 
@@ -992,7 +1343,7 @@ safeAssign(document.getElementById("spotifySearchBtn"), async () => {
   container.innerHTML = items.map(pl => `
     <div class="result-row">
       <div class="row-title">${pl.name}</div>
-      <button type="button" class="btn small" onclick="selectSpotifyPlaylist('${pl.id}','${pl.name.replace(/'/g,"\\'")}')">Select</button>
+      <button type="button" class="btn small" onclick="selectSpotifyPlaylist('${pl.id}','${pl.name.replace(/'/g, "\\'")}')">Select</button>
     </div>
   `).join("");
 });
@@ -1004,6 +1355,15 @@ safeAssign(els.importDownloadSelected, importDownloadSelected);
 safeAssign(document.getElementById("undownloadedBtn"), showUndownloadedPage);
 safeAssign(document.getElementById("backFromUndownloaded"), hideUndownloadedPage);
 safeAssign(els.repairBtn, repairActive);
+safeAssign(els.shareBtn, openShare);
+safeAssign(els.lyricsBtn, toggleLyrics);
+safeAssign(els.closeLyricsBtn, () => {
+  if (els.lyricsPanel) els.lyricsPanel.classList.add("hidden");
+});
+safeAssign(els.queueBtn, openQueue);
+safeAssign(document.getElementById("backFromQueue"), closeQueue);
+safeAssign(document.getElementById("clearQueueBtn"), clearQueue);
+safeAssign(document.getElementById("backFromShare"), closeShare);
 safeAssign(els.profileBtn, openProfileOverlay);
 safeAssign(els.backFromProfile, closeProfileOverlay);
 safeAssign(els.logoutBtn, logoutProfile);
@@ -1126,14 +1486,14 @@ async function deleteProfile() {
     });
 
     if (!res.ok) {
-      const body = await res.text().catch(()=>"");
+      const body = await res.text().catch(() => "");
       throw new Error(body || res.statusText);
     }
 
     // Clear client state for deleted profile
     const deletedId = activeProfile.id;
     activeProfile = null;
-    try { localStorage.removeItem("musix_activeProfile"); } catch (_) {}
+    try { localStorage.removeItem("musix_activeProfile"); } catch (_) { }
 
     // Refresh server list and UI
     await loadProfilesFromServer();
@@ -1272,19 +1632,19 @@ function renderSpotifyPlaylists(data) {
   container.innerHTML = items.map(pl => `
     <div class="result-row">
       <div class="row-title">${pl.name}</div>
-      <button class="btn small" onclick="selectSpotifyPlaylist('${pl.id}','${pl.name.replace(/'/g,"\\'")}')">Select</button>
+      <button class="btn small" onclick="selectSpotifyPlaylist('${pl.id}','${pl.name.replace(/'/g, "\\'")}')">Select</button>
     </div>
   `).join("");
 }
 
 // ----------- Init ------------
-(async function init(){
-  try { hide(els.progressOverlay); setProgress(0, ""); } catch (e) {}
+(async function init() {
+  try { hide(els.progressOverlay); setProgress(0, ""); } catch (e) { }
   await loadProfilesFromServer();
-  // If a single profile exists, auto-select. Else show chooser.
   if (profiles && profiles.length === 1) {
     selectProfile(profiles[0].id);
   } else {
     showProfileChooser();
   }
+  initUniversalSearch();
 })();

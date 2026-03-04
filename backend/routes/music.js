@@ -17,13 +17,87 @@ const { strongSanitize } = require("../utils/strongSanitize");
 const ROOT = path.join(__dirname, "..", "..");
 const PROFILES_DIR = path.join(ROOT, "profiles");
 if (!fs.existsSync(PROFILES_DIR)) fs.mkdirSync(PROFILES_DIR, { recursive: true });
-
-
+const crypto = require("crypto");
 // add near other requires at top
 const mm = require("music-metadata"); // npm i music-metadata
 // simple in-memory cache for thumbnails: key = absolute file path
 const thumbCache = new Map();
 
+const https = require("https");
+
+function ensureDir(dirPath) {
+  if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, { recursive: true });
+}
+// ── Lyrics helpers ────────────────────────────────────────────────────────────
+
+function getLyricsCachePath(profileId, filename) {
+  const hash = crypto.createHash("md5").update(filename).digest("hex");
+  const dir = path.join(PROFILES_DIR, profileId, "lyrics");
+  ensureDir(dir);
+  return path.join(dir, `${hash}.txt`);
+}
+
+function extractProfileIdFromPath(filePath) {
+  const parts = filePath.replace(/\\/g, "/").split("/profiles/");
+  if (parts.length < 2) return null;
+  return parts[1].split("/")[0];
+}
+
+async function fetchLyricsFromLrclib(title, artist) {
+  return new Promise((resolve) => {
+    const q = encodeURIComponent(`${title} ${artist}`.trim());
+    const url = `https://lrclib.net/api/search?q=${q}`;
+    https.get(url, { headers: { "User-Agent": "Musix/1.0" } }, (res) => {
+      let data = "";
+      res.on("data", chunk => data += chunk);
+      res.on("end", () => {
+        try {
+          const results = JSON.parse(data);
+          if (!results.length) return resolve(null);
+          // prefer result with plainLyrics
+          const match = results.find(r => r.plainLyrics) || results[0];
+          resolve(match.plainLyrics || null);
+        } catch { resolve(null); }
+      });
+    }).on("error", () => resolve(null));
+  });
+}
+
+async function getLyricsForFile(filePath) {
+  // extract profileId and filename from path
+  const profileId = extractProfileIdFromPath(filePath);
+  const filename = path.basename(filePath);
+  if (!profileId) return null;
+
+  // check cache first
+  const cachePath = getLyricsCachePath(profileId, filename);
+  if (fs.existsSync(cachePath)) {
+    const cached = fs.readFileSync(cachePath, "utf-8");
+    return cached === "__NONE__" ? null : cached;
+  }
+
+  // try embedded lyrics
+  try {
+    const { parseFile: parseMP3 } = require("music-metadata");
+    const metadata = await parseMP3(filePath);
+    const embedded = metadata.common.lyrics?.[0] || null;
+    if (embedded) {
+      fs.writeFileSync(cachePath, embedded, "utf-8");
+      return embedded;
+    }
+    // get title + artist for lrclib search
+    const title = metadata.common.title || path.basename(filePath, ".mp3");
+    const artist = metadata.common.artist || "";
+
+    // fetch from lrclib
+    const fetched = await fetchLyricsFromLrclib(title, artist);
+    // cache result (even null — store __NONE__ so we don't retry endlessly)
+    fs.writeFileSync(cachePath, fetched || "__NONE__", "utf-8");
+    return fetched;
+  } catch {
+    return null;
+  }
+}
 // extract embedded album art as data URI (cached)
 async function extractThumbnailDataUri(filePath) {
   try {
@@ -61,11 +135,11 @@ function findYtdlp() {
   for (const c of candidates) if (fs.existsSync(c)) return c;
   try {
     if (process.platform === "win32") {
-      return require("child_process").execSync("where yt-dlp", { stdio:["ignore","pipe","ignore"] }).toString().trim().split(/\r?\n/)[0];
+      return require("child_process").execSync("where yt-dlp", { stdio: ["ignore", "pipe", "ignore"] }).toString().trim().split(/\r?\n/)[0];
     } else {
-      return require("child_process").execSync("which yt-dlp", { stdio:["ignore","pipe","ignore"] }).toString().trim().split(/\r?\n/)[0];
+      return require("child_process").execSync("which yt-dlp", { stdio: ["ignore", "pipe", "ignore"] }).toString().trim().split(/\r?\n/)[0];
     }
-  } catch (_) {}
+  } catch (_) { }
   return null;
 }
 const YTDLP_PATH = findYtdlp();
@@ -75,11 +149,11 @@ else console.warn("yt-dlp not found. Place yt-dlp(.exe) in project root or insta
 function ensureYtdlp() { if (!YTDLP_PATH) throw new Error("yt-dlp not found"); }
 function spawnYtdlp(args, opts = {}) {
   ensureYtdlp();
-  return spawn(YTDLP_PATH, [...args, "--extractor-args", "youtube:player_client=android"], { stdio:["ignore","pipe","pipe"], ...opts });
+  return spawn(YTDLP_PATH, [...args, "--extractor-args", "youtube:player_client=android"], { stdio: ["ignore", "pipe", "pipe"], ...opts });
 }
 async function execYtdlp(args, opts = {}) {
   ensureYtdlp();
-  const { stdout, stderr } = await execFileP(YTDLP_PATH, [...args, "--extractor-args", "youtube:player_client=android"], { maxBuffer: 20*1024*1024, ...opts });
+  const { stdout, stderr } = await execFileP(YTDLP_PATH, [...args, "--extractor-args", "youtube:player_client=android"], { maxBuffer: 20 * 1024 * 1024, ...opts });
   return (stdout || stderr || "").toString();
 }
 
@@ -157,19 +231,11 @@ router.get("/playlist/:profileId/:name", async (req, res) => {
     const id = await ensureProfile(profileId);
     const dir = path.join(PROFILES_DIR, id, "playlists", name);
     if (!fs.existsSync(dir)) return res.json({ name, songs: [] });
-    // const files = (await fsp.readdir(dir)).filter(f => f.toLowerCase().endsWith(".mp3"));
-    // const songs = files.map(f => ({
-    //   id: (f.match(/\[([a-zA-Z0-9_-]{6,})\]/)||[])[1] || f,
-    //   title: f.replace(/\s*\[[^\]]+\]\.mp3$/i, "").trim(),
-    //   filename: f,
-    //   fileUrl: `/downloads/${encodeURIComponent(id)}/playlists/${encodeURIComponent(name)}/${encodeURIComponent(f)}`
-    // }));
-    // res.json({ name, songs });
     const files = (await fsp.readdir(dir)).filter(f => f.toLowerCase().endsWith(".mp3"));
 
     // build songs array by extracting thumbnails in parallel (cached)
     const songs = await Promise.all(files.map(async (f) => {
-      const idMatch = (f.match(/\[([a-zA-Z0-9_-]{6,})\]/)||[])[1] || f;
+      const idMatch = (f.match(/\[([a-zA-Z0-9_-]{6,})\]/) || [])[1] || f;
       const title = f.replace(/\s*\[[^\]]+\]\.mp3$/i, "").trim();
       const fileUrl = `/downloads/${encodeURIComponent(id)}/playlists/${encodeURIComponent(name)}/${encodeURIComponent(f)}`;
       const fullPath = path.join(dir, f);
@@ -184,7 +250,8 @@ router.get("/playlist/:profileId/:name", async (req, res) => {
         title,
         filename: f,
         fileUrl,
-        thumbnail // data URI or null
+        filePath: fullPath,
+        thumbnail
       };
     }));
 
@@ -257,7 +324,7 @@ async function downloadByIdToPlaylist(videoId, profileId, playlistName, jobId) {
   if (!found) throw new Error("Download finished but no MP3 found.");
   // rename to finalFile if needed
   if (found !== finalFile) {
-    try { await fsp.rename(path.join(dir, found), path.join(dir, finalFile)); } catch (_) {}
+    try { await fsp.rename(path.join(dir, found), path.join(dir, finalFile)); } catch (_) { }
   }
 }
 
@@ -405,4 +472,149 @@ router.post("/repair/:profileId/:name", async (req, res) => {
   } catch (err) { res.status(500).json({ error: "Repair failed", detail: String(err) }); }
 });
 
+// GET /api/music/search/local?profileId=xxx&q=xxx
+router.get("/search/local", async (req, res) => {
+  try {
+    const { profileId, q } = req.query;
+    if (!profileId || !q) return res.status(400).json({ error: "profileId and q required" });
+
+    const playlistsDir = path.join(PROFILES_DIR, profileId, "playlists");
+    if (!fs.existsSync(playlistsDir)) return res.json({ results: [] });
+
+    const query = q.toLowerCase();
+    const results = [];
+
+    const folders = fs.readdirSync(playlistsDir);
+    for (const folder of folders) {
+      const folderPath = path.join(playlistsDir, folder);
+      if (!fs.statSync(folderPath).isDirectory()) continue;
+
+      const files = fs.readdirSync(folderPath).filter(f => f.endsWith(".mp3"));
+      for (const file of files) {
+        const filePath = path.join(folderPath, file);
+        const host = req.headers.host || `localhost:${process.env.PORT || 5000}`;
+        const fileUrl = `http://${host}/downloads/${encodeURIComponent(profileId)}/playlists/${encodeURIComponent(folder)}/${encodeURIComponent(file)}`;
+
+        let title = "", artist = "", album = "";
+        try {
+          const meta = await parseFile(filePath);
+          title = meta.common.title || "";
+          artist = meta.common.artist || "";
+          album = meta.common.album || "";
+        } catch (_) { }
+
+        const searchable = `${title} ${artist} ${album} ${file}`.toLowerCase();
+        if (searchable.includes(query)) {
+          results.push({ title, artist, album, fileUrl, filename: file, playlist: folder });
+        }
+      }
+    }
+
+    res.json({ results });
+  } catch (err) {
+    res.status(500).json({ error: "Search failed", detail: String(err) });
+  }
+});
+// GET /api/music/lyrics?filePath=xxx
+// router.get("/lyrics", async (req, res) => {
+//   try {
+//     const { filePath } = req.query;
+//     if (!filePath) return res.status(400).json({ error: "filePath required" });
+
+//     // security: must be inside PROFILES_DIR
+//     const resolved = path.resolve(filePath);
+//     const profilesResolved = path.resolve(PROFILES_DIR);
+//     console.log("resolved:", resolved);
+//     console.log("profilesResolved:", profilesResolved);
+//     if (!resolved.startsWith(profilesResolved + path.sep)) {
+//       return res.status(403).json({ error: "Access denied" });
+//     }
+
+//     if (!fs.existsSync(resolved)) {
+//       return res.status(404).json({ error: "File not found" });
+//     }
+
+//     const metadata = await parseFile(resolved);
+//     const lyrics = metadata.common.lyrics?.[0] || null;
+
+//     res.json({ lyrics });
+//   } catch (err) {
+//     res.status(500).json({ error: "Failed to read lyrics", detail: String(err) });
+//   }
+// });
+// GET /api/music/lyrics?filePath=xxx
+router.get("/lyrics", async (req, res) => {
+  try {
+    const { filePath } = req.query;
+    if (!filePath) return res.status(400).json({ error: "filePath required" });
+
+    const resolved = path.resolve(filePath);
+    const profilesResolved = path.resolve(PROFILES_DIR);
+
+    if (!resolved.startsWith(profilesResolved + path.sep)) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+    if (!fs.existsSync(resolved)) {
+      return res.status(404).json({ error: "File not found" });
+    }
+
+    const lyrics = await getLyricsForFile(resolved);
+    res.json({ lyrics });
+  } catch (err) {
+    console.error("Lyrics error:", err);
+    res.status(500).json({ error: "Failed to read lyrics", detail: String(err) });
+  }
+});
+// ── Background lyrics scanner (runs once on server startup) ──────────────────
+async function scanAndCacheLyrics() {
+  console.log("[lyrics scanner] Starting background lyrics scan...");
+  let fetched = 0, skipped = 0, failed = 0;
+
+  try {
+    if (!fs.existsSync(PROFILES_DIR)) return;
+    const profiles = fs.readdirSync(PROFILES_DIR).filter(p => {
+      const pp = path.join(PROFILES_DIR, p);
+      return fs.statSync(pp).isDirectory() && fs.existsSync(path.join(pp, "profile.json"));
+    });
+
+    for (const profileId of profiles) {
+      const playlistsDir = path.join(PROFILES_DIR, profileId, "playlists");
+      if (!fs.existsSync(playlistsDir)) continue;
+
+      const playlists = fs.readdirSync(playlistsDir).filter(p =>
+        fs.statSync(path.join(playlistsDir, p)).isDirectory()
+      );
+
+      for (const playlist of playlists) {
+        const playlistDir = path.join(playlistsDir, playlist);
+        const files = fs.readdirSync(playlistDir).filter(f => f.endsWith(".mp3"));
+
+        for (const file of files) {
+          const filePath = path.join(playlistDir, file);
+          const cachePath = getLyricsCachePath(profileId, file);
+
+          // skip if already cached
+          if (fs.existsSync(cachePath)) { skipped++; continue; }
+
+          try {
+            const lyrics = await getLyricsForFile(filePath);
+            if (lyrics) fetched++;
+            else failed++;
+            // small delay to avoid hammering lrclib
+            await new Promise(r => setTimeout(r, 500));
+          } catch {
+            failed++;
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[lyrics scanner] Error:", err);
+  }
+
+  console.log(`[lyrics scanner] Done — fetched: ${fetched}, skipped: ${skipped}, not found: ${failed}`);
+}
+
+// run after a short delay so server finishes starting up first
+setTimeout(scanAndCacheLyrics, 5000);
 module.exports = router;

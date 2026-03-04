@@ -1,78 +1,3 @@
-// // backend/routes/spotify.js
-// const express = require("express");
-// const router = express.Router();
-// const fetch = require("node-fetch");
-// require("dotenv").config();
-
-// const clientId = process.env.SPOTIFY_CLIENT_ID;
-// const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
-// const redirectUri = process.env.SPOTIFY_REDIRECT_URI;
-
-// // Step 1: Redirect user to Spotify login
-// router.get("/login", (req, res) => {
-//   const scope = [
-//     "playlist-read-private",
-//     "playlist-read-collaborative",
-//     "user-read-email",
-//     "user-read-private"
-//   ].join(" ");
-
-//   const authUrl = new URL("https://accounts.spotify.com/authorize");
-//   authUrl.searchParams.set("client_id", clientId);
-//   authUrl.searchParams.set("response_type", "code");
-//   authUrl.searchParams.set("redirect_uri", redirectUri);
-//   authUrl.searchParams.set("scope", scope);
-
-//   res.redirect(authUrl.toString());
-// });
-
-// // Step 2: Handle callback
-// router.get("/callback", async (req, res) => {
-//   const code = req.query.code;
-//   if (!code) return res.status(400).send("Missing code");
-
-//   const tokenRes = await fetch("https://accounts.spotify.com/api/token", {
-//     method: "POST",
-//     headers: {
-//       "Authorization": "Basic " + Buffer.from(`${clientId}:${clientSecret}`).toString("base64"),
-//       "Content-Type": "application/x-www-form-urlencoded"
-//     },
-//     body: new URLSearchParams({
-//       grant_type: "authorization_code",
-//       code,
-//       redirect_uri: redirectUri
-//     })
-//   });
-
-//   const data = await tokenRes.json();
-//   if (data.error) return res.status(400).json(data);
-
-//   // Save tokens in session or in-memory for now
-//   req.session = req.session || {};
-//   req.session.spotify = data;
-
-//   // Redirect back to frontend
-//   res.redirect("/?spotify=success");
-// });
-
-// // Step 3: Fetch user playlists
-// router.get("/playlists", async (req, res) => {
-//   if (!req.session || !req.session.spotify) return res.status(401).json({ error: "Not logged in" });
-
-//   const token = req.session.spotify.access_token;
-
-//   const response = await fetch("https://api.spotify.com/v1/me/playlists", {
-//     headers: { "Authorization": `Bearer ${token}` }
-//   });
-
-//   const playlists = await response.json();
-//   res.json(playlists);
-// });
-
-// module.exports = router;
-
-//-------------------------------------------------------------------------------
-
 // backend/routes/spotify.js
 const express = require("express");
 const router = express.Router();
@@ -84,6 +9,7 @@ const clientId = process.env.SPOTIFY_CLIENT_ID;
 const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
 const redirectUri = process.env.SPOTIFY_REDIRECT_URI;
 const querystring = require("querystring");
+const pendingStates = new Map(); // state -> timestamp for CSRF protection
 
 // helper: random state
 function makeState(len = 16) {
@@ -154,7 +80,7 @@ async function ensureValidAccessToken(req) {
 router.get("/login", (req, res) => {
   // Generate and save state for CSRF protection
   const state = makeState(24);
-  req.session.spotifyState = state;
+  pendingStates.set(state, Date.now());
   console.log("[/login] Generated state =", state);
   console.log("[/login] Session ID =", req.sessionID);
   console.log("[/login] Session object =", req.session);
@@ -198,12 +124,10 @@ router.get("/callback", async (req, res) => {
   console.log("[callback] Session ID (server) =", req.sessionID);
 
 
-  // validate state
-  if (!state || !req.session || req.session.spotifyState !== state) {
+  if (!state || !pendingStates.has(state)) {
     return res.status(400).send("Invalid or missing Spotify state (CSRF check failed)");
   }
-  // clear stored state once used
-  delete req.session.spotifyState;
+  pendingStates.delete(state); // consume it
   console.log("[/callback] State validated and cleared.");
 
   try {
