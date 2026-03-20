@@ -157,7 +157,8 @@ async function execYtdlp(args, opts = {}) {
   return (stdout || stderr || "").toString();
 }
 
-const FFMPEG_PATH = process.env.FFMPEG_PATH || "C:\\ffmpeg\\bin\\ffmpeg.exe";
+// const FFMPEG_PATH = process.env.FFMPEG_PATH || "C:\\ffmpeg\\bin\\ffmpeg.exe";
+const FFMPEG_PATH = process.env.FFMPEG_PATH || path.join(ROOT, "ffmpeg", "bin", "ffmpeg.exe");
 
 function safeFileName(base) {
   let s = sanitize(base || "Untitled");

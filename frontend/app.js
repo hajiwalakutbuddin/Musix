@@ -420,7 +420,7 @@ function prev() {
   if (!tracks.length) return;
   if (queue.length) {
     const item = queue.pop();
-    playFile(item.fileUrl, item.title);
+    playFile(item.fileUrl, item.title, item.thumbnail, item.filePath);
     return;
   }
   if (isShuffle) {
@@ -435,7 +435,7 @@ function prev() {
 function next() {
   if (queue.length) {
     const item = queue.shift();
-    playFile(item.fileUrl, item.title);
+    playFile(item.fileUrl, item.title, item.thumbnail, item.filePath);
     return;
   }
   if (isLoop) {
@@ -479,9 +479,19 @@ function playAllTracks() {
   playIndex(0);
 }
 
+// function queueTrack(index) {
+//   if (!tracks[index]) return;
+//   queue.push({ fileUrl: tracks[index].fileUrl, title: tracks[index].title });
+//   alert(`Queued: ${tracks[index].title}`);
+// }
 function queueTrack(index) {
   if (!tracks[index]) return;
-  queue.push({ fileUrl: tracks[index].fileUrl, title: tracks[index].title });
+  queue.push({
+    fileUrl: tracks[index].fileUrl,
+    title: tracks[index].title,
+    thumbnail: tracks[index].thumbnail || null,
+    filePath: tracks[index].filePath || null
+  });
   alert(`Queued: ${tracks[index].title}`);
 }
 
